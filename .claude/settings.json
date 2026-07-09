@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "model": "opus[1m]",
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "permission_prompt|agent_needs_input|elicitation_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$HOME/.claude/hooks/notify.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "disableArtifact": true,
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh",
+    "padding": 0
+  },
+  "enabledPlugins": {
+    "context7@claude-plugins-official": false,
+    "frontend-design@claude-code-plugins": false,
+    "typescript-lsp@claude-plugins-official": false,
+    "kotlin-lsp@claude-plugins-official": false,
+    "swift-lsp@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": true,
+    "sniff@skillz": true,
+    "snare@skillz": true,
+    "trail@skillz": true
+  },
+  "extraKnownMarketplaces": {
+    "skillz": {
+      "source": {
+        "source": "github",
+        "repo": "muningis/claude-code-setup"
+      }
+    }
+  },
+  "alwaysThinkingEnabled": true,
+  "effortLevel": "high",
+  "advisorModel": "opus",
+  "autoUpdatesChannel": "stable",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "preferredNotifChannel": "iterm2",
+  "teammateMode": "auto",
+  "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "Never run terraform apply",
+      "Never commit without running verify loop"
+    ]
+  },
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "voiceEnabled": true
+}

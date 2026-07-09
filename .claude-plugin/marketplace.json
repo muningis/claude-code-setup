@@ -1,0 +1,33 @@
+{
+  "name": "skillz",
+  "owner": {
+    "name": "muningis",
+    "email": "rokas@muningis.lt"
+  },
+  "metadata": {
+    "description": "muningis' personal Claude Code skills & plugins marketplace",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "snare",
+      "source": "./plugins/snare",
+      "description": "Reproduction-driven red/green bugfix loop: reproduce a bug, trap it in a failing test, fix it, then re-run the exact same flow to prove it's gone."
+    },
+    {
+      "name": "sniff",
+      "source": "./plugins/sniff",
+      "description": "Sniff out a real error from an app/service's logs, normalize it into a reproduction recipe, and hand it to snare. Source auto-detected per repo, confirmed once, then cached to .claude/sniff.json."
+    },
+    {
+      "name": "recap",
+      "source": "./plugins/recap",
+      "description": "Summarize what you worked on across Claude Code sessions since the last recap — a ready-to-paste standup of the tasks you actually drove, grouped by project."
+    },
+    {
+      "name": "trail",
+      "source": "./plugins/trail",
+      "description": "Decision archaeology: reconstruct WHY code is the way it is by following its trail through git history and past Claude Code sessions — the reasoning and rejected alternatives a commit message never captures."
+    }
+  ]
+}
