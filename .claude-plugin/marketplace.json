@@ -28,6 +28,11 @@
       "name": "trail",
       "source": "./plugins/trail",
       "description": "Decision archaeology: reconstruct WHY code is the way it is by following its trail through git history and past Claude Code sessions — the reasoning and rejected alternatives a commit message never captures."
+    },
+    {
+      "name": "scruff",
+      "source": "./plugins/scruff",
+      "description": "Mentor mode: teach, don't type. Scruff briefs you on the structure and verified doc links to build it yourself, keeps its paws off your files, then grabs you by the scruff at review time and grills what you built — every criticism backed by proof, not vibes."
     }
   ]
 }

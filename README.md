@@ -30,7 +30,7 @@ setup.sh               # idempotent bootstrap — installs CLI tools + the Basic
 .claude-plugin/        # this repo IS a plugin marketplace (name: skillz)
   marketplace.json     # manifest listing the plugins below
 plugins/               # vendored Claude Code plugins (skills)
-  snare/ sniff/ trail/ recap/
+  snare/ sniff/ trail/ recap/ scruff/
 mcp/                   # on-demand knowledge/docs MCP servers (Basic Memory, Context7)
   README.md            # rationale, per-server usage, portable config for other harnesses
 setup.md               # maintenance & cleanup runbook (every removal is gated by a question)
@@ -93,6 +93,7 @@ plugins under `plugins/`:
 - **sniff** — pull a real error from an app/service's logs into a repro recipe.
 - **trail** — decision archaeology: reconstruct *why* code is the way it is.
 - **recap** — cross-session standup of what you actually drove.
+- **scruff** — mentor mode: briefs you to build it yourself, then grills what you built (with proof).
 
 Enabled via `<plugin>@skillz` in `~/.claude/settings.json` (`enabledPlugins`);
 `extraKnownMarketplaces.skillz` points at this repo. The plugins are consumed as a
