@@ -1,8 +1,8 @@
 # Workspace
 
 ## Models
-- `claude-opus-4-8[1m]` — planning, orchestration, delegation (main loop; judgment only).
-- `claude-sonnet-4-6` — research, exploration, implementation, review.
+- `claude-opus-5[1m]` — planning, orchestration, delegation (main loop; judgment only).
+- `claude-sonnet-5` — research, exploration, implementation, review.
 - `claude-haiku-4-5` — trivial: lint, tests, static analysis, docs.
 
 ## Workflow — cheap to understand → Opus decides once → cheap to verify
