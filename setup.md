@@ -49,9 +49,11 @@ what you found, why it's a candidate, and the exact effect of removing it.
   → Ask before deleting each.
 
 ### 5. Config drift
-- Compare the live `~/.claude` against this repo's `.claude/`. Re-sync
-  differences by **copying, not deleting**. If the live config changed
-  intentionally, update the repo copy and commit.
+- `CLAUDE.md`, `statusline.sh` and `hooks/notify.sh` are symlinks into this repo's
+  `home/`, so they cannot drift — verify with `ls -l ~/.claude`. Only
+  `settings.json` is copied and can diverge: `bash setup.sh --sync-only` reports
+  the difference without overwriting. Re-sync by **copying, not deleting**; if the
+  live config changed intentionally, update `home/settings.json` and commit.
 
 ## After any confirmed cleanup
 - Re-sync affected config into this repo and commit.

@@ -4,7 +4,7 @@ My personal Claude Code configuration.
 
 ## Models & workflow
 
-Three-tier model split (see [`.claude/CLAUDE.md`](./.claude/CLAUDE.md) for the full
+Three-tier model split (see [`home/CLAUDE.md`](./home/CLAUDE.md) for the full
 workflow contract):
 
 | Model | Role |
@@ -20,8 +20,10 @@ effort is `high` (`~/.claude/settings.json`), always-thinking is on.
 ## Layout
 
 ```
-setup.sh               # idempotent bootstrap — installs CLI tools + the Basic Memory & Context7 MCP servers
-.claude/               # mirrors ~/.claude (drop-in restore target)
+setup.sh               # idempotent bootstrap — CLI tools, the Basic Memory & Context7 MCP servers, and the ~/.claude sync
+home/                  # source for ~/.claude — deliberately not named .claude, or it
+                       # would also load as THIS repo's project config, on top of the
+                       # user config it's meant to be the source of
   settings.json        # model, plugins, statusline, notif channel, hooks, effort, auto-mode
   CLAUDE.md            # global workflow contract Opus follows
   statusline.sh        # custom 3-line status line (dir/branch · model/effort · ctx/cost/limits)
@@ -104,7 +106,7 @@ marketplace, not copied — point Claude Code at the repo and enable what you wa
 Because I run 3–4 sessions at once, each session pings a native macOS banner (with
 sound) when it needs me — so I know *which* one and *why* without watching.
 
-- **Script:** `.claude/hooks/notify.sh` — reads the hook JSON on stdin, titles the
+- **Script:** `home/hooks/notify.sh` — reads the hook JSON on stdin, titles the
   banner with the project folder name (`basename $cwd`), and plays a distinct sound
   per event. Uses the absolute `$HOME/.claude/hooks/notify.sh` path since it's a
   global hook running from any project's cwd. Always `exit 0`s and never blocks a
@@ -145,13 +147,23 @@ printf '{"hook_event_name":"Stop","cwd":"'"$PWD"'","background_tasks":[{"status"
 ## Restore / install
 
 ```bash
-# 1) global Claude Code config
-cp -R .claude/. ~/.claude/
-chmod +x ~/.claude/statusline.sh ~/.claude/hooks/notify.sh
+bash setup.sh            # review it first — brew-installs the CLI tools, installs Basic Memory,
+                         # edits ~/.claude.json, and links ~/.claude to home/
 
-# 2) CLI tools + on-demand knowledge/memory MCP server
-bash setup.sh            # review it first — brew-installs the CLI tools, installs Basic Memory, edits ~/.claude.json
+bash setup.sh --sync-only  # just re-link ~/.claude, skipping brew and MCP
 ```
+
+`CLAUDE.md`, `statusline.sh` and `hooks/notify.sh` are **symlinked** into this repo,
+so editing either path edits the same file and the two can't drift. Anything already
+at those paths is renamed to `*.bak.<timestamp>` first, never deleted.
+
+`settings.json` is **copied**, not linked — Claude Code rewrites it whenever you
+switch model or effort or toggle a plugin, which would otherwise dirty the repo
+constantly. So it can drift: if the live file differs, setup.sh reports it and
+prints the copy command for whichever direction you want, rather than overwriting.
+
+Only `hooks/notify.sh` is linked, not the whole `hooks/` directory — the hook
+appends to `~/.claude/hooks/notify.log` at runtime, which must not land in the repo.
 
 Then restart any running Claude Code sessions to pick up the new config.
 
