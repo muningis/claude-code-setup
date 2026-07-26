@@ -38,6 +38,11 @@
       "name": "scruff",
       "source": "./plugins/scruff",
       "description": "Mentor mode: teach, don't type. Scruff briefs you on the structure and verified doc links to build it yourself, keeps its paws off your files, then grabs you by the scruff at review time and grills what you built — every criticism backed by proof, not vibes."
+    },
+    {
+      "name": "kit",
+      "source": "./plugins/kit",
+      "description": "Kit out a repo with code intelligence: detect the languages it uses, fetch the matching language servers, and enable the LSP plugins in that repo's own .claude/settings.json — scoped there, nothing global."
     }
   ]
 }

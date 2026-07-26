@@ -39,13 +39,15 @@
     "context7@claude-plugins-official": false,
     "frontend-design@claude-code-plugins": false,
     "kotlin-lsp@claude-plugins-official": false,
+    "typescript-lsp@claude-plugins-official": false,
+    "skill-creator@claude-plugins-official": false,
+    "swift-lsp@claude-plugins-official": false,
     "scruff@skillz": true,
-    "skill-creator@claude-plugins-official": true,
     "snare@skillz": true,
     "sniff@skillz": true,
-    "swift-lsp@claude-plugins-official": false,
     "trail@skillz": true,
-    "typescript-lsp@claude-plugins-official": false
+    "rinse@skillz": true,
+    "kit@skillz": false
   },
   "extraKnownMarketplaces": {
     "skillz": {
