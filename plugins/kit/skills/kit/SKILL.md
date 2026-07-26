@@ -44,10 +44,11 @@ anything. THIS judgment is why kit is a skill and not just a script.
 | Swift | `Package.swift` | `swift-lsp` | `sourcekit-lsp` | ships with the Swift toolchain |
 
 Plugin availability changes, so confirm the id exists before enabling — never
-invent one:
+invent one. `claude plugin marketplace list` prints *marketplaces*, not plugins,
+so grep the cached manifest instead:
 
 ```bash
-claude plugin marketplace list 2>/dev/null | grep -i lsp || true
+grep -rho '"name": *"[^"]*lsp"' ~/.claude/plugins/marketplaces/*/.claude-plugin/marketplace.json | sort -u
 ```
 
 If a detected language has no official LSP plugin, say so and skip it.
@@ -79,8 +80,9 @@ you whether the server is on PATH so you can install before reporting success.
 Per language: server installed or already present, plugin enabled or already on,
 and which file was written. Then the one caveat kit can't automate:
 
-> A committed `.claude/settings.json` starts servers only after you **trust the
-> workspace** — reopen the repo and accept the trust prompt.
+> A committed `.claude/settings.json` starts an LSP server only after a **full
+> restart** — fully reopen the repo and accept the trust prompt. `/reload-plugins`
+> won't spawn it; language servers launch only at session start.
 
 If you wrote the committed `.claude/settings.json`, note it's a team-shared change
 worth a commit; `--local` keeps it to this machine.
