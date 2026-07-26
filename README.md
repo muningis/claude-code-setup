@@ -98,6 +98,7 @@ plugins under `plugins/`:
 - **rinse** — verification loop for finished work: run the repo's checks, fix, re-run the whole set, then hand you what only a human can confirm.
 - **scruff** — mentor mode: briefs you to build it yourself, then grills what you built (with proof).
 - **kit** — kit out a repo with code intelligence: detect its languages, install the language servers, and enable the LSP plugins in that repo's own `.claude/settings.json`.
+  - *Why:* the enabled LSP lets Claude navigate by symbol — go-to-definition, find-references, type-on-hover — which is more precise and cheaper in tokens than reading whole files to answer a symbol-level question. It's the symbol layer; for plain text and non-code files, `rg` still wins.
 
 Enabled via `<plugin>@skillz` in `~/.claude/settings.json` (`enabledPlugins`);
 `extraKnownMarketplaces.skillz` points at this repo. The plugins are consumed as a
