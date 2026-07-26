@@ -9,7 +9,7 @@
 1. **Orient.** CLI tools (below) for targeted lookups; ONE Explore agent for broad discovery (conclusions + paths, not dumps); `search` Basic Memory for prior decisions.
 2. **Decide once — in Plan Mode.** Sessions boot in Auto Mode; for any non-trivial work, ENTER Plan Mode first (present the plan, get approval) before editing — Opus makes the plan/architecture call from the distilled findings. Only trivial/mechanical work proceeds straight through Auto Mode.
 3. **Implement by coupling.** Coupled work + small in-context edits → inline (one-line reason if non-trivial). Self-contained → ONE sub-agent, cheaper `model:` (`sonnet`; `haiku` trivial). Parallel independent edits → a team, each `isolation: worktree`. Downgrade workers; prefer one (multi-agent ≈15× tokens). Every delegation states objective, output, tools, boundaries, and a done-condition.
-4. **Verify once.** Repo loop a single time via Haiku at the end — not per-edit, not on the Opus loop; trust a worker's green report. Quality-critical → a Sonnet reviewer with concrete criteria.
+4. **Verify once.** `/rinse:rinse` at the end — once, not per-edit; trust a worker's green report. Keep it on the main loop: its manual checks have to reach you. Quality-critical → a Sonnet reviewer with concrete criteria.
 5. **Persist.** Decisions/conventions/gotchas → Basic Memory (`write_note`); keep this file and `MEMORY.md` thin.
 
 Orchestration/config edits (this file, `.claude/**`, plans, memory) are always Opus's own, inline.

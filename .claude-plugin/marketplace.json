@@ -30,6 +30,11 @@
       "description": "Decision archaeology: reconstruct WHY code is the way it is by following its trail through git history and past Claude Code sessions — the reasoning and rejected alternatives a commit message never captures."
     },
     {
+      "name": "rinse",
+      "source": "./plugins/rinse",
+      "description": "Verification loop for finished work: run the repo's checks, fix what fails, then re-run the WHOLE set — a fix routinely breaks a sibling — and hand you the short list only a human can confirm. Check set cached to .claude/rinse.json."
+    },
+    {
       "name": "scruff",
       "source": "./plugins/scruff",
       "description": "Mentor mode: teach, don't type. Scruff briefs you on the structure and verified doc links to build it yourself, keeps its paws off your files, then grabs you by the scruff at review time and grills what you built — every criticism backed by proof, not vibes."
