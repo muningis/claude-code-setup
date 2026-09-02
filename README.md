@@ -32,7 +32,7 @@ home/                  # source for ~/.claude — deliberately not named .claude
 .claude-plugin/        # this repo IS a plugin marketplace (name: skillz)
   marketplace.json     # manifest listing the plugins below
 plugins/               # vendored Claude Code plugins (skills)
-  snare/ sniff/ trail/ recap/ rinse/ scruff/ kit/
+  snare/ sniff/ trail/ recap/ rinse/ scruff/ kit/ baton/
 mcp/                   # on-demand knowledge/docs MCP servers (Basic Memory, Context7)
   README.md            # rationale, per-server usage, portable config for other harnesses
 setup.md               # maintenance & cleanup runbook (every removal is gated by a question)
@@ -96,6 +96,11 @@ plugins under `plugins/`:
 - **trail** — decision archaeology: reconstruct *why* code is the way it is.
 - **recap** — cross-session standup of what you actually drove.
 - **rinse** — verification loop for finished work: run the repo's checks, fix, re-run the whole set, then hand you what only a human can confirm.
+- **baton** — pass a session on, in two skills: `/baton:handover` writes what the
+  next session needs (mission, observed git state, decisions and rejected
+  alternatives, dead ends, ordered next steps) for a single repo, a multi-repo
+  workspace, or an exploration workspace; `/baton:resume` reads one back, re-checks
+  it against the repos as they are now, and leads with what has drifted since.
 - **scruff** — mentor mode: briefs you to build it yourself, then grills what you built (with proof).
 - **kit** — kit out a repo with code intelligence: detect its languages, install the language servers, and enable the LSP plugins in that repo's own `.claude/settings.json`.
   - *Why:* the enabled LSP lets Claude navigate by symbol — go-to-definition, find-references, type-on-hover — which is more precise and cheaper in tokens than reading whole files to answer a symbol-level question. It's the symbol layer; for plain text and non-code files, `rg` still wins.
