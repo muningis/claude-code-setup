@@ -37,7 +37,7 @@
     {
       "name": "baton",
       "source": "./plugins/baton",
-      "description": "Hand a session off to the next one: write a handover — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace, then resume from it in the fresh session."
+      "description": "Pass a session on, in two skills: /baton:handover writes what the next session needs — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace; /baton:resume reads one back and leads with what has drifted since."
     },
     {
       "name": "scruff",

@@ -2,7 +2,7 @@
   "name": "baton",
   "displayName": "Baton",
   "version": "0.1.0",
-  "description": "Hand a session off to the next one: write a handover — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace, then resume from it in the fresh session.",
+  "description": "Two skills for passing a session on: handover writes what the next session needs — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace; resume reads one back and leads with what has drifted since.",
   "author": {
     "name": "muningis",
     "email": "rokas@muningis.lt"
