@@ -1,0 +1,12 @@
+{
+  "name": "baton",
+  "displayName": "Baton",
+  "version": "0.1.0",
+  "description": "Hand a session off to the next one: write a handover — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace, then resume from it in the fresh session.",
+  "author": {
+    "name": "muningis",
+    "email": "rokas@muningis.lt"
+  },
+  "license": "MIT",
+  "keywords": ["handover", "handoff", "continuation", "context", "session", "resume", "workspace"]
+}

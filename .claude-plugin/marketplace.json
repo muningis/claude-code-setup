@@ -35,6 +35,11 @@
       "description": "Verification loop for finished work: run the repo's checks, fix what fails, then re-run the WHOLE set — a fix routinely breaks a sibling — and hand you the short list only a human can confirm. Check set cached to .claude/rinse.json."
     },
     {
+      "name": "baton",
+      "source": "./plugins/baton",
+      "description": "Hand a session off to the next one: write a handover — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace, then resume from it in the fresh session."
+    },
+    {
       "name": "scruff",
       "source": "./plugins/scruff",
       "description": "Mentor mode: teach, don't type. Scruff briefs you on the structure and verified doc links to build it yourself, keeps its paws off your files, then grabs you by the scruff at review time and grills what you built — every criticism backed by proof, not vibes."
