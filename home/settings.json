@@ -48,7 +48,8 @@
     "trail@skillz": true,
     "rinse@skillz": true,
     "baton@skillz": true,
-    "kit@skillz": false
+    "kit@skillz": false,
+    "ratchet@skillz": true
   },
   "extraKnownMarketplaces": {
     "skillz": {

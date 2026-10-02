@@ -48,6 +48,11 @@
       "name": "kit",
       "source": "./plugins/kit",
       "description": "Kit out a repo with code intelligence: detect the languages it uses, fetch the matching language servers, and enable the LSP plugins in that repo's own .claude/settings.json — scoped there, nothing global."
+    },
+    {
+      "name": "ratchet",
+      "source": "./plugins/ratchet",
+      "description": "Helix-style checkpoint workflow: plan a feature as small checkpoints (skeleton → small slice → grow), then push each through four gates — red-first pinned tests, a visual diff against a reference, two blind adversarial reviewers, your approval — before the next one starts. Your feedback compounds in learnings.md; --auto is earned."
     }
   ]
 }
