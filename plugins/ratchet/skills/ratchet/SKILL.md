@@ -32,8 +32,12 @@ doesn't start until the current one locks.
    - `--no-verify`
    - editing `config.json`, `architecture.md`, `learnings.md` or a verdict to get a pass
 4. Specs are pinned from B0 on, this checkpoint's and every earlier one's. After each
-   implementer round, run `RS check .claude/ratchet/evidence/<slug>/*`. Any change fails
-   the round and is put back with `RS restore`. Only an amendment changes a spec.
+   implementer round, run `RS check .claude/ratchet/evidence/<slug>/*`. A changed spec
+   file fails the round and is put back with `RS restore`. Only an amendment changes a
+   spec.
+   - A changed `PIN` file is different. Show it to the user (`diff -u` against its copy
+     in `PIN/locked/`): keep it → re-lock; otherwise restore it.
+   - When you change a state file with the user's OK, re-lock `PIN` right away.
 5. A gate that can't run (missing tool, failed capture, app won't start) is `error`,
    never pass.
 6. Each fix loop stops at `maxRounds`. Then the row becomes `blocked`, with the reason in
@@ -44,7 +48,9 @@ doesn't start until the current one locks.
 
 `RS` = `bash ${CLAUDE_SKILL_DIR}/scripts/ratchet.sh`: the deterministic mechanics
 (`snap [<name>]`, `drop`, `diff`, `size`, `changed`, `tripwire`, `stage`, `lock`,
-`check`, `restore`). Its header documents each one. Call it; don't re-derive.
+`check`, `restore`). Its header documents each one. Call it; don't re-derive. Write
+the full `bash …/ratchet.sh <cmd>` in every command. Never keep it in a shell variable:
+the shell may be zsh, which won't split it.
 When `config.models.<role>` is set, pass it as the agent's `model:`.
 
 ## State
