@@ -1,0 +1,158 @@
+// What the den reads out of events: pure functions, so the tests cover them
+// without an engine.
+import type { DenActor, DenPlan, DenPlanRow, DenRole } from '../types'
+
+const ROLE_NAMES: readonly string[] = ['spec', 'implement', 'visual', 'review-arch', 'review-break']
+
+export function roleOf(type: string): DenRole | undefined {
+  const m = /^ratchet:(.+)$/.exec(type)
+  return m && ROLE_NAMES.includes(m[1]!) ? (m[1] as DenRole) : undefined
+}
+
+export const clip = (t: string, n = 40) => (t.length > n ? `${t.slice(0, n - 1)}…` : t)
+
+/** One line for what a tool call is doing: `Edit app.ts`, `$ bun test`. */
+export function summarize(tool: string, input: Readonly<Record<string, unknown>>): string {
+  const s = (k: string) => (typeof input[k] === 'string' ? (input[k] as string) : '')
+  const base = (p: string) => p.split('/').pop() || p
+  switch (tool) {
+    case 'Bash':
+      return clip(`$ ${s('command').split('\n')[0]}`)
+    case 'Read':
+    case 'Write':
+    case 'Edit':
+    case 'MultiEdit':
+      return `${tool} ${base(s('file_path'))}`
+    case 'NotebookEdit':
+      return `Edit ${base(s('notebook_path'))}`
+    case 'Grep':
+      return clip(`grep ${s('pattern')}`)
+    case 'Glob':
+      return clip(`glob ${s('pattern')}`)
+    case 'WebFetch':
+      return clip(`fetch ${s('url').replace(/^https?:\/\//, '')}`)
+    case 'WebSearch':
+      return clip(`search ${s('query')}`)
+    case 'Agent':
+      return clip(`→ ${s('subagent_type') || 'agent'}: ${s('description')}`)
+    case 'Skill':
+      return clip(`/${s('skill')}`)
+    default:
+      return clip(tool.replace(/^mcp__.+?__/, ''))
+  }
+}
+
+function json(text: string): Record<string, unknown> | undefined {
+  const i = text.indexOf('{')
+  const j = text.lastIndexOf('}')
+  if (i < 0 || j <= i) return undefined
+  try {
+    const v: unknown = JSON.parse(text.slice(i, j + 1))
+    return v && typeof v === 'object' ? (v as Record<string, unknown>) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** What a ratchet agent's final answer says: the verdict and a short note. */
+export function verdictOf(role: DenRole | undefined, answer: string): { verdict?: DenActor['verdict']; note?: string } {
+  if (!role) return {}
+  const j = json(answer)
+  const findings = Array.isArray(j?.findings) ? (j!.findings as Array<Record<string, unknown>>) : []
+  const top = findings[0]
+  const topText = top ? clip(` · ${String(top.severity ?? '')} ${String(top.issue ?? '')}`.replace(/\s+/g, ' '), 44) : ''
+  switch (role) {
+    case 'review-arch':
+    case 'review-break':
+      if (j?.verdict === 'APPROVE') return { verdict: 'approve', note: 'APPROVE' }
+      if (j?.verdict === 'CHANGES') return { verdict: 'changes', note: `CHANGES (${findings.length})${topText}` }
+      return {}
+    case 'visual':
+      if (j?.verdict === 'PASS') return { verdict: 'approve', note: 'PASS' }
+      if (j?.verdict === 'FAIL') return { verdict: 'changes', note: `FAIL (${findings.length})${topText}` }
+      if (j?.verdict === 'INVALID') return { verdict: 'fail', note: 'INVALID capture' }
+      return {}
+    case 'spec': {
+      const block = /cases:\s*\n([\s\S]*?)(?:\n[a-z]+:|$)/.exec(answer)?.[1] ?? ''
+      const n = block.split('\n').filter(l => /^\s*-\s/.test(l)).length
+      return { verdict: 'approve', note: n ? `${n} cases pinned` : 'spec written' }
+    }
+    case 'implement':
+      return { verdict: 'approve', note: 'built it' }
+  }
+}
+
+/** Rows of a ratchet plan table, by its header (`| id | checkpoint | … | status |`). */
+export function parsePlan(text: string): DenPlanRow[] {
+  const lines = text.split('\n').filter(l => l.trim().startsWith('|'))
+  const header = lines.find(l => /\|\s*id\s*\|/i.test(l))
+  if (!header) return []
+  const cols = header.split('|').map(c => c.trim().toLowerCase())
+  const iId = cols.indexOf('id')
+  const iTitle = cols.indexOf('checkpoint')
+  const iStatus = cols.indexOf('status')
+  if (iId < 0 || iStatus < 0) return []
+  return lines
+    .map(l => l.split('|').map(c => c.trim()))
+    .filter(c => /^cp\d+$/i.test(c[iId] ?? ''))
+    .map(c => ({ id: c[iId]!, title: c[iTitle] ?? '', status: (c[iStatus] ?? '').toLowerCase() }))
+}
+
+export const currentRow = (plan: DenPlan | null) => plan?.rows.find(r => r.status !== 'approved')
+
+/** The gate the run is at, from who's working and the current row's status. */
+export function gateOf(plan: DenPlan | null, actors: readonly DenActor[]): string {
+  const busy = (r: DenRole) => actors.some(a => a.role === r && a.status === 'working')
+  if (busy('review-arch') || busy('review-break')) return 'B3'
+  if (busy('visual')) return 'B2'
+  if (busy('implement')) return 'B1'
+  if (busy('spec')) return 'B0'
+  const row = currentRow(plan)
+  if (!row) return ''
+  return { todo: 'B0', red: 'B1', green: 'B4', blocked: '⛔' }[row.status] ?? ''
+}
+
+export function trackLine(plan: DenPlan): string {
+  const mark = (s: string, isCurrent: boolean) =>
+    s === 'approved' ? '✓' : s === 'blocked' ? '✗' : isCurrent ? '◐' : '○'
+  const cur = currentRow(plan)?.id
+  return plan.rows
+    .slice(0, 8)
+    .map(r => `${r.id} ${mark(r.status, r.id === cur)}`)
+    .join('━')
+}
+
+export function gateLine(gate: string): string {
+  const order = ['B0', 'B1', 'B2', 'B3', 'B4']
+  const at = order.indexOf(gate)
+  return order.map((g, i) => `${g}${at < 0 ? '·' : i < at ? '✓' : i === at ? '◐' : '·'}`).join(' ')
+}
+
+export const ROLE_ICON: Record<DenRole, string> = {
+  spec: '📋',
+  implement: '🔨',
+  visual: '📷',
+  'review-arch': '📐',
+  'review-break': '🪓',
+}
+
+export function iconOf(a: DenActor): string {
+  if (a.role) return ROLE_ICON[a.role]
+  if (a.kind === 'main') return '🦝'
+  if (a.type === 'Explore') return '🔭'
+  if (a.type === 'Plan') return '📘'
+  return '👷'
+}
+
+export const kTok = (n: number) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
+
+export function statusText(mode: 'calm' | 'hyper', actors: readonly DenActor[], plan: DenPlan | null, paneShown: boolean): string | undefined {
+  if (mode === 'hyper') {
+    const row = currentRow(plan)
+    const gate = gateOf(plan, actors)
+    return `🦝 RATCHET${row ? ` ${row.id}` : ''}${gate ? ` ${gate}` : ''}`
+  }
+  if (paneShown) return undefined
+  const n = actors.filter(a => a.kind === 'agent' && a.status === 'working').length
+  return n ? `🦝 ${n} at work · /den` : undefined
+}
