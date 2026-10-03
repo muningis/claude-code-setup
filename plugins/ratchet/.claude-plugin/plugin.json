@@ -1,7 +1,7 @@
 {
   "name": "ratchet",
   "displayName": "Ratchet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Helix-style checkpoint workflow: plan a feature as small checkpoints (skeleton → small slice → grow), then push each through four gates — red-first pinned tests, a visual diff against a reference, two blind adversarial reviewers, your approval — before the next one starts. Feedback compounds in .claude/ratchet/learnings.md; --auto is earned.",
   "author": {
     "name": "muningis",

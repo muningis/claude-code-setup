@@ -69,7 +69,8 @@ action still standing.
 
 `recap` answers *what did I work on lately* (backwards, for you); `trail` answers
 *why is this code like this* (backwards, from history); `baton` carries *this*
-session forward, to the next Claude.
+session forward, to the next Claude. `ratchet` writes minimal batons of its own, one per
+checkpoint, and resets the context to them.
 
 ## Install
 

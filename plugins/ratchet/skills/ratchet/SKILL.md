@@ -14,7 +14,8 @@ doesn't start until the current one locks.
 `$ARGUMENTS`:
 - `plan <goal>`: Read `${CLAUDE_SKILL_DIR}/references/plan.md` and follow it
   (`--refresh` re-detects the config).
-- `run [<slug>] [--auto]`: **Run**, below.
+- `run [<slug>] [--auto]`: **Run**, below. `--relay` is added by ratchet's relay mod, not
+  typed: it means the run hands over at each checkpoint's end (B5).
 - `review [<slug>]`: B4 for every `green` row, as one batch.
 - `status`, or no arguments: print each plan's table. With no plan, ask for a goal.
 
@@ -48,9 +49,9 @@ doesn't start until the current one locks.
 
 `RS` = `bash ${CLAUDE_SKILL_DIR}/scripts/ratchet.sh`: the deterministic mechanics
 (`snap [<name>]`, `drop`, `diff`, `size`, `changed`, `tripwire`, `stage`, `lock`,
-`check`, `restore`). Its header documents each one. Call it; don't re-derive. Write
-the full `bash …/ratchet.sh <cmd>` in every command. Never keep it in a shell variable:
-the shell may be zsh, which won't split it.
+`check`, `restore`, `baton`). Its header documents each one. Call it; don't
+re-derive. Write the full `bash …/ratchet.sh <cmd>` in every command. Never keep it in
+a shell variable: the shell may be zsh, which won't split it.
 When `config.models.<role>` is set, pass it as the agent's `model:`.
 
 ## State
@@ -71,6 +72,9 @@ Under `.claude/ratchet/`:
   reference does
 - `evidence/<slug>/<cp>/`: `EV`, gitignored proof, `-r<n>` per round
 
+`.claude/handovers/ratchet-<slug>.md` is the baton: the few lines a context reset would
+otherwise lose (standing OKs, open items). Everything else is on disk already.
+
 Rows go `todo` → `red` (spec pinned) → `green` (gates 1–3 passed) → `approved` (by the
 human), or `blocked`.
 - `BASE` = `refs/ratchet/<slug>/<cp>/base`
@@ -80,8 +84,8 @@ human), or `blocked`.
 
 ## Run
 
-**Pick.** If one plan has open rows, use it; if several do, ask which. Take the first
-row that isn't `approved`:
+**Pick.** If one plan has open rows, use it; if several do, ask which. Read its baton
+first if there is one, and honor its lines. Take the first row that isn't `approved`:
 - `todo` → B0
 - `red` → B1
 - `green` → B4 (under an earned `--auto`, the next row)
@@ -214,14 +218,26 @@ Row → `approved`. Then offer the commit:
 Commit only with the user's OK, given here or as a standing "commit each one". Under
 `--auto`, a standing OK commits at `green`. After a commit, run `RS drop <slug>/<cp>`.
 
-Then, interactive: name the next checkpoint and stop. `--auto`: go to B0 for the next
-one.
+Then, once the commit is settled (made, declined, or covered by a standing OK):
+- **With `--relay`**, and rows still `todo` or `red`: hand over. Run
+  `RS baton <slug> continue|stop "<start>" ["<line>"...]`, where:
+  - `continue` is for an `--auto` run, `stop` for an interactive one.
+  - `<start>` is the resume command and next step, such as
+    `/ratchet run <slug> --auto  (next: cp3 → B0)`.
+  - Each `<line>` is something not on disk: a standing OK, an escalation or dispute
+    still open. Write nothing that the plan or `EV` already records.
+
+  End your turn with its marker as the last line. The relay mod then resets the context
+  to the baton and, on `continue`, starts the next run.
+- **Without `--relay`**: interactive, name the next checkpoint and stop. `--auto`: go
+  to B0 for the next one.
 
 ## End of plan
 
 Print `| cp | checkpoint | status | B1 | B2 | B3 rounds | human |`. Then plainly state
-every `error`, spent cap and unverified human gate. Run `RS drop <slug>`. If the repo
-uses rinse, its review and manual checks weren't gates, so suggest `/rinse:rinse` once.
+every `error`, spent cap and unverified human gate. Run `RS drop <slug>` and
+`RS baton <slug> clear`. If the repo uses rinse, its review and manual checks weren't
+gates, so suggest `/rinse:rinse` once.
 
 ## State at invocation
 

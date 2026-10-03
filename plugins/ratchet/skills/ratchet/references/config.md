@@ -8,6 +8,7 @@ Written once per repo, in Part A, after the plan is approved.
   "maxRounds": 3,
   "maxDiffLines": 600,
   "autoAfter": 2,
+  "relay": true,
   "behavior": {
     "one": "bun test {files}",
     "all": "bun test",
@@ -29,6 +30,7 @@ Written once per repo, in Part A, after the plan is approved.
 | `maxRounds` | Fix rounds per gate per checkpoint. When they run out, the row is `blocked`. |
 | `maxDiffLines` | The size guard. A checkpoint whose `RS size` exceeds this is too big to review: split it instead. |
 | `autoAfter` | `--auto` still holds the human gate on each checkpoint until this many rows of the plan are human-`approved`. `0` trusts `--auto` from cp1. |
+| `relay` | Reset the context to a minimal baton after each checkpoint (needs ratchet's relay mod). `false` keeps one context for the whole run. |
 | `behavior.one` | Runs only the given spec files. `{files}` is a space-separated list of shell-quoted, repo-root-relative paths. |
 | `behavior.all`, `behavior.extra` | The full suite, then cheap static checks (types, lint). Each must exit 0, or fail only where the baseline already did. |
 | `visual` | `null` for products without a UI; gate 2 then reads `n/a`. Otherwise, see below. |

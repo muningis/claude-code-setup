@@ -51,6 +51,26 @@ never passes it. Commits per checkpoint happen only with your OK.
 - Deferred checkpoints wait for `/ratchet review`. Your feedback there still becomes
   rules.
 
+## Context resets, per checkpoint
+
+Every checkpoint starts from a clean context. When one locks, ratchet writes a baton
+of a few lines to `.claude/handovers/ratchet-<slug>.md`: where to resume, plus any
+standing OKs or open items that aren't already on disk. Everything else (the plan,
+the evidence, the snapshots) is on disk already. Then it ends its turn.
+
+ratchet's relay mod (`hooks/relay.tsx`) then:
+1. Runs `/compact`, answering it with the baton itself, so there's no LLM summary.
+   The conversation becomes that one message.
+2. Under `--auto`, starts `/ratchet run <slug> --auto` again. Interactively, it stops,
+   and your next `/ratchet run` picks up from the baton.
+
+The baton keeps baton's handover format, so `/baton:resume` reads it too.
+- The mod marks the run by adding `--relay` to it; without the mod (mods off,
+  headless, desktop), ratchet runs in one context as before.
+- It stops relaying when a baton repeats (no progress), or after 30 relays in a
+  session.
+- `"relay": false` in `config.json` turns it off.
+
 ## What lands in the repo
 
 | `.claude/ratchet/…` | |

@@ -23,6 +23,11 @@
 #   lock <dir> <file>...       pin files: hash in <dir>/spec.lock, copy in <dir>/locked/
 #   check <dir>...             exit 1 listing pinned files that changed or vanished
 #   restore <dir>              put changed or vanished pinned files back from the copies
+#   baton <slug> continue|stop <start> [<line>...]
+#                              write the minimal handover .claude/handovers/ratchet-<slug>.md
+#                              (start = the resume command and next gate; lines = only what
+#                              isn't on disk) and print the marker the relay mod acts on
+#   baton <slug> clear         delete it: the plan is done
 
 set -euo pipefail
 
@@ -160,6 +165,23 @@ case "$cmd" in
         mkdir -p "$(dirname "$f")"; cp -p "$dir/locked/$f" "$f"; echo "restored $f"
       fi
     done < "$dir/spec.lock"
+    ;;
+  baton)
+    to_top; slug=${1:-}; how=${2:-}
+    [ -n "$slug" ] && [ -n "$how" ] || die "usage: baton <slug> continue|stop <start> [<line>...] | baton <slug> clear"
+    file="$PWD/.claude/handovers/ratchet-$slug.md"
+    if [ "$how" = clear ]; then rm -f "$file"; echo "baton cleared"; exit 0; fi
+    case "$how" in continue|stop) ;; *) die "baton: expected continue, stop or clear, got $how" ;; esac
+    [ -n "${3:-}" ] || die "baton needs <start>"
+    mkdir -p "$(dirname "$file")"
+    {
+      echo "# Handover — ratchet $slug"
+      echo "<!-- scope: repo · roots: $PWD · written: $(date -u +%Y-%m-%d-%H%M) -->"
+      echo "**Start here:** $3"
+      shift 3
+      for line in "$@"; do echo "- $line"; done
+    } > "$file"
+    echo "[ratchet] baton $file $how"
     ;;
   *)
     sed -n '/^# ratchet/,/^$/p' "$0" >&2; exit 2
