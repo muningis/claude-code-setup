@@ -640,15 +640,18 @@ def render_md(bid, items):
 
 
 def load_candidates(bdir, bid, log):
-    """The list in candidates.json, or the one in reflect.log when the file is missing."""
+    """The list in candidates.json, or else the reflection's answer in reflect.log.
+
+    The nightly run answers in reflect.log: its folder is in ~/.claude, where a headless
+    run may not write. A lead that spawns ratchet:reflect saves the answer as candidates.json."""
     path = os.path.join(bdir, "candidates.json")
     raw = common.read_json(path, default=None)
     if raw is None:
         raw = candidates_from_log(os.path.join(bdir, "reflect.log"))
         if raw is None:
-            raise RsError("no candidates.json in dream %s: the reflection wrote nothing" % bid)
+            raise RsError("no candidates in dream %s: the reflection gave no JSON answer" % bid)
         common.write_json(path, raw)
-        log.append("note: candidates.json was missing, so these candidates come from reflect.log")
+        log.append("note: the candidates come from the reflection's answer in reflect.log")
     cands = raw.get("candidates") if isinstance(raw, dict) else raw
     if not isinstance(cands, list):
         raise RsError('candidates.json must hold {"candidates": [...]}')

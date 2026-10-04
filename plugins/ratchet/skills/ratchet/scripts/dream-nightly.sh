@@ -80,11 +80,11 @@ log "reflecting with ${model:-sonnet}, budget ${budget:-2} USD"
 # confined to the bundle (--restricted), and no transcript that a later dream could read.
 bash "$RS" exec --timeout "$TIMEOUT" -- sh -c 'cd "$1" && shift && exec "$@"' sh "$bdir" \
   "$CLAUDE" -p "$(cat "$bdir/prompt.md")" --model "${model:-sonnet}" --max-budget-usd "${budget:-2}" \
-  --safe-mode --restricted --no-session-persistence --allowedTools Read Write \
+  --safe-mode --restricted --no-session-persistence --allowedTools Read \
   >"$bdir/reflect.log" 2>&1
 claude_status=$?
 
-# Curate takes candidates.json, or the answer in reflect.log when the headless run could not write the file.
+# The sealed run may not write in ~/.claude, so it answers on stdout, and curate reads its answer from reflect.log.
 rs_step dream curate "$bundle"
 if [ "$status" -ne 0 ]; then
   log "error, curate failed (claude exit $claude_status, see $bdir/reflect.log): $(why)"; exit 1

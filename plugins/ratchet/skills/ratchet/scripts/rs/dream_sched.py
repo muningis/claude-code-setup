@@ -24,9 +24,8 @@ You run inside the dream folder, and you can read only inside it. Every path is 
 - context/memory-<project>.md: the MEMORY.md index of each project that has human turns
 - context/ratchet-<n>-learnings.md: the learnings of one repo (context/ratchet-map.json names the repo of each n)
 - context/rejected.jsonl: items that the human rejected
-- candidates.json: write your output here
 
-Write only candidates.json. Change no other file.
+Do not write a file. Your final answer is the candidates JSON, and nothing else.
 """
 
 

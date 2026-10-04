@@ -33,10 +33,13 @@ Each dream command works in any folder, also outside a git repo.
 
    `--dry` shows the numbers and writes nothing.
 2. `RS dream prompt <date>` writes the reflection prompt into the bundle. Then run the
-   reflection in the bundle folder. The nightly job runs headless `claude -p` with
-   `--safe-mode --restricted --no-session-persistence`. On demand, you can spawn
-   `ratchet:reflect` with the bundle path. The reflection reads only the bundle, and it
-   writes `candidates.json`.
+   reflection in the bundle folder:
+   - The nightly job runs headless `claude -p` with `--safe-mode --restricted
+     --no-session-persistence --allowedTools Read`. The reflection reads only the
+     bundle. A headless run may not write in `~/.claude`, so the answer is the
+     candidates JSON, and it goes to `reflect.log`.
+   - On demand, you can spawn `ratchet:reflect` with the bundle path instead. Then save
+     its answer as `candidates.json` in the bundle.
 3. `RS dream curate <date>` is code. It checks each citation against the harvest. It
    counts the recurrence itself, and ignores a count that the model gives. It removes
    duplicates and rejected items, and keeps `maxItems` items or fewer. It writes

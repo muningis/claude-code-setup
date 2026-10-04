@@ -523,7 +523,7 @@ t('curate takes the JSON from reflect.log when the reflection could not write ca
   const dir = `${R}/dreams/${bundle}`
   const none = dream(work, 'curate', bundle)
   expect(none.code).toBe(2)
-  expect(none.json.summary).toContain('wrote nothing')
+  expect(none.json.summary).toContain('gave no JSON answer')
 
   const answer = {
     candidates: [{
@@ -536,7 +536,7 @@ t('curate takes the JSON from reflect.log when the reflection could not write ca
   expect(c.code).toBe(0)
   expect(c.json).toMatchObject({ verdict: 'pass', items: 1 })
   expect(json(home, `${dir}/candidates.json`)).toEqual(answer)
-  expect(read(home, c.json.evidence)).toContain('come from reflect.log')
+  expect(read(home, c.json.evidence)).toContain("answer in reflect.log")
 })
 
 t('curate drops a fake cite, ignores a claimed count, and gates a global and a project rule by the cited turns', () => {
@@ -935,12 +935,12 @@ t('the nightly script harvests, runs a sealed claude from the bundle folder, cur
   // The prompt comes first because --allowedTools takes a list. The run is sealed, and the model comes from reflect.md.
   expect(readFileSync(claudeLog, 'utf8').trim().split('\n')).toEqual(
     ['--model', 'sonnet', '--max-budget-usd', '2', '--safe-mode', '--restricted', '--no-session-persistence',
-      '--allowedTools', 'Read', 'Write'])
+      '--allowedTools', 'Read'])
   // claude runs inside the bundle, which holds everything that the prompt names.
   expect(readFileSync(`${claudeLog}.pwd`, 'utf8').trim()).toBe(realpathSync(join(home, R, 'dreams', bundle)))
   const prompt = readFileSync(`${claudeLog}.prompt`, 'utf8')
   expect(prompt).toContain('You read what one person said to Claude Code')
-  expect(prompt).toContain('- candidates.json: write your output here')
+  expect(prompt).toContain('Do not write a file. Your final answer is the candidates JSON')
   expect(prompt).not.toContain('model: sonnet')
   expect(has(home, `${R}/dreams/${bundle}/context/global-rules.md`)).toBe(true)
 
