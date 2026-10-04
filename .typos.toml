@@ -1,0 +1,3 @@
+# "Nd" is the day unit in --since spans (Nd|Nh|Nw), not a misspelt "And".
+[default.extend-words]
+nd = "nd"

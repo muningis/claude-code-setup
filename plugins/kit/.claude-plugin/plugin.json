@@ -1,7 +1,7 @@
 {
   "name": "kit",
   "displayName": "Kit",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Kit out a repo with language-server support: detect its languages, install the matching servers, and enable the LSP plugins in the repo's own .claude/settings.json — scoped to that repo, nothing global.",
   "author": {
     "name": "muningis",

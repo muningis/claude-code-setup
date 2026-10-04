@@ -8,12 +8,13 @@ project. Never run `git init` in a parent folder.
 
 ## 1. Config
 
-When `.claude/ratchet/config.json` exists, use it. A version 1 config gets migrated after
-approval (see `config.md`, "Migration").
+When `.claude/ratchet/config.json` exists and sets `behavior.all`, use it. A version 1
+config gets migrated after approval (see `config.md`, "Migration").
 
-With no config, find the facts without changes:
+With no config, or with a config that has only `checks` (verify writes these), find the
+facts without changes. Keep the checks that the config has.
 - **Tests.** What CI runs is the best signal. Then the manifest scripts and the test
-  runner. When `.claude/rinse.json` exists, take its checks.
+  runner. When a legacy `.claude/rinse.json` exists, take its checks.
 - **UI.** Does the product have one? Can a target render headless, or does it need a
   running app? Is there a reference: an old app, a design export, an old component?
 - **Architecture.** Look for `ARCHITECTURE.md`, `docs/` and the conventions in

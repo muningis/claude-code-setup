@@ -30,7 +30,7 @@ what you found, why it's a candidate, and the exact effect of removing it.
   decisions store). The goal is ONE store. → Ask before migrating a note into
   Basic Memory and removing the file copy.
 - **Basic Memory config** — confirm a project exists and points where you want
-  notes versioned (`list_memory_projects`). An empty or mis-pointed store is a
+  notes versioned (`list_memory_projects`). An empty or misdirected store is a
   silent blocker to fix, never something to delete.
 
 ### 2. Parked / disabled / removed tooling references

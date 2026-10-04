@@ -6,11 +6,12 @@
 - `claude-haiku-4-5` — trivial: lint, tests, static analysis, docs.
 
 ## Workflow — cheap to understand → Opus decides once → cheap to verify
-1. **Orient.** CLI tools (below) for targeted lookups; ONE Explore agent for broad discovery (conclusions + paths, not dumps); `search` Basic Memory for prior decisions.
-2. **Decide once — in Plan Mode.** Sessions boot in Auto Mode; for any non-trivial work, ENTER Plan Mode first (present the plan, get approval) before editing — Opus makes the plan/architecture call from the distilled findings. Only trivial/mechanical work proceeds straight through Auto Mode. Multi-step features, ports and rewrites that warrant gated checkpoints → *suggest* `/ratchet <goal>` (user-invoked; never start it yourself). For a bug, *suggest* `/ratchet fix <bug>`.
+`ratchet` is the one workflow plugin; each step names the part of it to use.
+1. **Orient.** CLI tools (below) for targeted lookups; ONE Explore agent for broad discovery (conclusions + paths, not dumps); `search` Basic Memory for prior decisions; `ratchet:why` before changing code whose reason isn't obvious.
+2. **Decide once — in Plan Mode.** Sessions boot in Auto Mode; for any non-trivial work, ENTER Plan Mode first (present the plan, get approval) before editing — Opus makes the plan/architecture call from the distilled findings. Only trivial/mechanical work proceeds straight through Auto Mode. Unclear requirements → `ratchet:grill`; a risky plan (data, migrations, security, hard to undo) → `ratchet:roast` before approval. Multi-step features, ports and rewrites that warrant gated checkpoints → *suggest* `/ratchet <goal>`; a bug → *suggest* `/ratchet fix <bug or log>` (both user-invoked; never start them yourself).
 3. **Implement by coupling.** Coupled work + small in-context edits → inline (one-line reason if non-trivial). Self-contained → ONE sub-agent, cheaper `model:` (`sonnet`; `haiku` trivial). Parallel independent edits → a team, each `isolation: worktree`. Downgrade workers; prefer one (multi-agent ≈15× tokens). Every delegation states objective, output, tools, boundaries, and a done-condition.
-4. **Verify once.** `/rinse:rinse` at the end — once, not per-edit; trust a worker's green report. Keep it on the main loop: its manual checks have to reach you. Quality-critical → a Sonnet reviewer with concrete criteria.
-5. **Persist.** Decisions/conventions/gotchas → Basic Memory (`write_note`); keep this file and `MEMORY.md` thin.
+4. **Verify once.** `ratchet:verify` at the end — once, not per-edit; trust a worker's green report. Keep it on the main loop: its manual checks have to reach you. Quality-critical → a Sonnet reviewer with concrete criteria.
+5. **Persist.** Decisions/conventions/gotchas → Basic Memory (`write_note`); keep this file and `MEMORY.md` thin. Context nearly full, or the work continues later → `ratchet:handover`; pick it up with `ratchet:resume`.
 
 Orchestration/config edits (this file, `.claude/**`, plans, memory) are always Opus's own, inline.
 

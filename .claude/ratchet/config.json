@@ -1,0 +1,20 @@
+{
+  "version": 2,
+  "checks": [
+    { "id": "shellcheck", "kind": "command",
+      "run": "shellcheck setup.sh plugins/*/*.sh plugins/*/skills/*/scripts/*.sh",
+      "when": ["**/*.sh"], "gate": ["b1", "verify"] },
+    { "id": "validate", "kind": "command",
+      "run": "for p in plugins/*/; do claude plugin validate \"$p\" > /tmp/ratchet-validate.txt 2>&1 || { cat /tmp/ratchet-validate.txt; exit 1; }; done; echo all plugins valid",
+      "when": ["plugins/**", ".claude-plugin/**"], "gate": ["b1", "verify"] },
+    { "id": "mod-tests", "kind": "command",
+      "run": "for p in plugins/*/; do ls \"$p\"hooks/*.test.ts >/dev/null 2>&1 || continue; claude plugin test \"$p\" || exit 1; done",
+      "when": ["plugins/*/hooks/**"], "gate": ["b1", "verify"] },
+    { "id": "ratchet-tests", "kind": "command", "run": "bun test plugins/ratchet/tests",
+      "when": ["plugins/ratchet/**"], "gate": ["b1", "verify"], "timeout": 300 },
+    { "id": "typos", "kind": "command", "run": "typos plugins home docs README.md setup.md",
+      "gate": ["verify"] },
+    { "id": "gitleaks", "kind": "command", "run": "gitleaks dir . --no-banner",
+      "gate": ["verify"], "autofix": false }
+  ]
+}

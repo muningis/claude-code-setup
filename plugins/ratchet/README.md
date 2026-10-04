@@ -12,15 +12,27 @@ checkpoint does not start before the current one locks.
 /ratchet continue [--auto]   run the next checkpoint through the gates
 /ratchet review              the human gate for rows that --auto took to green
 /ratchet status              each plan's table
-/ratchet verify              run the repo's checks on what changed (the rinse flow)
-/ratchet handover | resume   pass the work to the next session (the baton flow)
-/ratchet why <question>      why the code is this way (the trail flow)
+/ratchet verify              run the repo's checks on what changed
+/ratchet handover | resume   pass the work to the next session
+/ratchet why <question>      why the code is this way
 /ratchet dream               propose learnings from past runs
 ```
 
 `/ratchet` runs only when you call it, because one checkpoint costs 5 to 8 agent runs.
-Two parts also work alone, when you ask for them: `grill` ("grill me") and `roast`
-("roast this").
+Six parts also start alone, when the request fits them:
+
+| Skill | Starts when |
+| --- | --- |
+| `ratchet:grill` | you ask to be grilled, and when a plan starts |
+| `ratchet:roast` | you ask for a roast of a plan, a design or a diff |
+| `ratchet:verify` | a change is finished, or you ask to verify or check it |
+| `ratchet:why` | you ask why code is the way it is |
+| `ratchet:handover` | the context is nearly full, or you ask to hand over |
+| `ratchet:resume` | you ask to continue from a handover |
+
+Ratchet replaces five older plugins: rinse (verify), snare and sniff (fix), baton
+(handover and resume) and trail (why). It still reads their files: `.claude/rinse.json`,
+`.claude/sniff.json` and the handovers in `.claude/handovers/`.
 
 ## Tracks
 

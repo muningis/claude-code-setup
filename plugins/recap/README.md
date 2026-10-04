@@ -17,7 +17,7 @@ grouped by project, phrased as completed work.
 
 A helper script does the parsing; the skill does the summarizing.
 
-- `skills/recap/SKILL.md` — invokable as `/recap:recap`.
+- `skills/recap/SKILL.md` — invocable as `/recap:recap`.
 - `skills/recap/scripts/sessions.py` — walks the transcripts, applies the window
   and scope, and emits one JSON record per session (title, your prompts, time
   span, project). Run it directly to see the raw material:

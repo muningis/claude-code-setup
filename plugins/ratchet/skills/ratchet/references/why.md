@@ -1,8 +1,8 @@
 # Why
 
-Find out **why** code is the way it is, not only what it does. This is the trail flow,
-inside ratchet. It uses two sources: git history (what changed, and when) and past Claude
-Code sessions (the request, the reasons, and the options that were rejected).
+Find out **why** code is the way it is, not only what it does. Use two sources: git
+history (what changed, and when) and past Claude Code sessions (the request, the reasons,
+and the options that were rejected).
 
 `$ARGUMENTS`: what to trace: a file, a symbol, a config key, or a decision in words.
 

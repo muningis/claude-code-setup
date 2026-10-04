@@ -1,7 +1,7 @@
 # `.claude/ratchet/config.json`, version 2
 
-Ratchet writes this file once per repo, after you approve the first plan. It is meant to
-be committed.
+Ratchet writes this file once per repo, after you approve the first plan. Verify can
+write `checks` before that. The file is meant to be committed.
 
 ```json
 {
@@ -69,6 +69,7 @@ be committed.
 | `when` | Globs. The check applies only when a changed file matches. When there are no globs, the check always applies. |
 | `gate` | Where a `command` check runs: `b1`, `evidence` (its output goes to the reviewers) and `verify`. The default is `["b1", "verify"]`. |
 | `timeout` | Seconds. The default is `behavior.timeout`. |
+| `autofix` | `false` makes the check hands-off in verify: report a failure, and do not fix it. The default is `true`. |
 
 ## Migration
 

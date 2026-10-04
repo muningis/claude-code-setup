@@ -121,3 +121,16 @@ landed. Four rows give ranges, not statistics. The scripts are in `/tmp/p0-basel
   the gate time did not change.
 - One reset failed, because a hand-typed marker had no path. The relay now accepts the
   slug alone.
+
+### 2026-10-04 · One plugin
+
+The human reversed the trade-off "Both stay". Ratchet is now the one workflow plugin.
+
+- rinse, snare, sniff, baton and trail are gone from the marketplace.
+- `verify`, `why`, `handover` and `resume` are ratchet skills that start alone when a
+  request fits them. Each skill reads its reference. Plans and the fix track start only
+  when the human types them.
+- Ratchet still reads the old files: `.claude/rinse.json`, `.claude/sniff.json` and the
+  handovers that baton wrote.
+- Step 1 of `plan.md` treats a config with only `checks` as no config, because verify
+  can write such a config.

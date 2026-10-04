@@ -1,7 +1,7 @@
 # Verify
 
 Run the repo's checks on what changed. Fix what fails. Run the full set again. Then give
-the human the checks that only a human can do. This is the rinse flow, inside ratchet.
+the human the checks that only a human can do.
 
 Options in `$ARGUMENTS`: a check `id` to run alone, a path to limit the scope, `--all` to
 ignore the `when` globs.
@@ -11,13 +11,15 @@ ignore the `when` globs.
 Use the checks in `.claude/ratchet/config.json` whose `gate` list has `verify`, and all
 checks of kind `review`, `manual` and `device`.
 
-- When the config has no such checks, but `.claude/rinse.json` exists, use its checks.
+- When the config has no such checks, but a legacy `.claude/rinse.json` exists, use its
+  checks.
 - When neither exists, find the checks without changes:
   1. What CI runs is the best signal. Then read the manifest scripts and the tool config.
   2. Confirm the set with one AskUserQuestion.
   3. Ask, in plain words, what only a human can check: a layout, a real device, an email
      that must arrive. Never invent a manual check.
-  4. Write the result to `checks` in the config.
+  4. Write the result to `checks` in the config. With no config, write only `version`
+     and `checks`. The first plan adds the other keys.
 - In a clone that the human did not set up, show each `run` command, and confirm one
   time before you run it.
 
@@ -50,6 +52,7 @@ When a check fails: fix the cause, then run **each** check in scope again. A fix
 check can break another. Stop after 3 rounds on one check, and report what you tried in
 each round.
 
+- A check with `"autofix": false` is hands-off. Report its failure, and do not fix it.
 - Never edit the config to get a pass. When a check is wrong, say so. The human decides.
 - Never weaken a check (see the invariants in `SKILL.md`).
 - A check that cannot run is `error`, not `pass`.

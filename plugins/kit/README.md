@@ -22,7 +22,7 @@ overrides it being **off** in `~/.claude/settings.json` — for this repo only.
 
 ## Skill
 
-- `skills/kit/SKILL.md` — invokable as `/kit:kit`.
+- `skills/kit/SKILL.md` — invocable as `/kit:kit`.
 - `kit.sh` — the deterministic settings-merge primitive. **Agent-invoked only**;
   you never run it. The skill detects and adjudicates, then calls `kit.sh` for the
   one step that must be exact.
@@ -57,4 +57,4 @@ plugins scoped to that repo.
 ## Not this
 
 - Global `~/.claude` config, MCP servers, CLI tools → the workspace `setup.sh`.
-- Verifying a change you just made → `rinse`.
+- Verifying a change you just made → `ratchet:verify`.

@@ -10,34 +10,9 @@
   },
   "plugins": [
     {
-      "name": "snare",
-      "source": "./plugins/snare",
-      "description": "Reproduction-driven red/green bugfix loop: reproduce a bug, trap it in a failing test, fix it, then re-run the exact same flow to prove it's gone."
-    },
-    {
-      "name": "sniff",
-      "source": "./plugins/sniff",
-      "description": "Sniff out a real error from an app/service's logs, normalize it into a reproduction recipe, and hand it to snare. Source auto-detected per repo, confirmed once, then cached to .claude/sniff.json."
-    },
-    {
       "name": "recap",
       "source": "./plugins/recap",
       "description": "Summarize what you worked on across Claude Code sessions since the last recap — a ready-to-paste standup of the tasks you actually drove, grouped by project."
-    },
-    {
-      "name": "trail",
-      "source": "./plugins/trail",
-      "description": "Decision archaeology: reconstruct WHY code is the way it is by following its trail through git history and past Claude Code sessions — the reasoning and rejected alternatives a commit message never captures."
-    },
-    {
-      "name": "rinse",
-      "source": "./plugins/rinse",
-      "description": "Verification loop for finished work: run the repo's checks, fix what fails, then re-run the WHOLE set — a fix routinely breaks a sibling — and hand you the short list only a human can confirm. Check set cached to .claude/rinse.json."
-    },
-    {
-      "name": "baton",
-      "source": "./plugins/baton",
-      "description": "Pass a session on, in two skills: /baton:handover writes what the next session needs — mission, observed git state, decisions and rejected alternatives, dead ends, next steps — for a single repo, a multi-repo workspace, or an exploration workspace; /baton:resume reads one back and leads with what has drifted since."
     },
     {
       "name": "scruff",

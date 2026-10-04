@@ -90,4 +90,4 @@ worth a commit; `--local` keeps it to this machine.
 ## Not this
 
 - Global `~/.claude` config, MCP servers, CLI tools → the workspace `setup.sh`.
-- Verifying a change you just made → `rinse`.
+- Verifying a change you just made → `ratchet:verify`.

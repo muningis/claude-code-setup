@@ -1,7 +1,7 @@
 # Handover and resume
 
-Pass work to the next session. This is the baton flow, inside ratchet. The file format is
-the same as baton's, so baton's `resume` can read ratchet's files, and the other way.
+Pass work to the next session. The file format is the format of the old baton plugin, so
+resume also reads the handovers that baton wrote.
 
 `state.py` collects the facts from git. The reasons exist only in this conversation, and
 they are the part that has value.

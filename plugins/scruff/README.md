@@ -31,7 +31,7 @@ invoke it, never on an ordinary "implement X" request.
 
 ## Pairs with
 
-`snare` fixes a bug *for* you (red→green). `scruff` makes *you* fix it, then tells
+`/ratchet fix` fixes a bug *for* you (red→green). `scruff` makes *you* fix it, then tells
 you how badly you did.
 
 ## Install

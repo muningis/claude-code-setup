@@ -1,6 +1,6 @@
 # Fix
 
-The fix track is the snare and sniff flow, inside ratchet. The reproduction is the spec.
+In the fix track, the reproduction is the spec.
 
 Reproduce the bug first. Capture it in a test that fails for the right reason. Fix the
 cause. Then run the same reproduction again, without change, to prove that the bug is
