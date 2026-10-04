@@ -36,6 +36,7 @@ import {
   MAX_WAITS,
   waitCommand,
   parseArgs,
+  parseRelay,
   readySummary,
   sentence,
   skipArch,
@@ -59,20 +60,14 @@ const P = { pre: "Preflight", b0: "B0 spec", b1: "B1 build", b2: "B2 visual", b3
 const STRINGS = { type: "array", items: { type: "string" } };
 const LEVELS = ["high", "medium", "low"];
 
-// Every RS command adds its own fields, so the relay schema names only the shared ones
-// and allows the rest. `pending` comes from a detached gate that still runs.
+// The runtime drops every property that a schema does not declare, also with
+// additionalProperties: true. Each RS command prints fields of its own (state: slug, cp,
+// stage, epoch; gates: brief, images, patch, blocking …), so the relay returns the printed
+// text whole and parseRelay reads it.
 const RELAY_SCHEMA = {
   type: "object",
-  additionalProperties: true,
-  properties: {
-    ok: { type: "boolean" },
-    cmd: { type: "string" },
-    nonce: { type: ["string", "null"] },
-    verdict: { type: "string", enum: ["pass", "fail", "error", "pending"] },
-    summary: { type: "string" },
-    job: { type: "string" },
-  },
-  required: ["ok"],
+  properties: { raw: { type: "string" } },
+  required: ["raw"],
 };
 
 // rs keys the round-2 triage on these IDs, so a free-form ID would lose a finding.
@@ -214,7 +209,8 @@ function agentOpts(
 
 function relayPrompt(cfg: Config, command: string): string {
   return [
-    `Run this one command from ${cfg.repo} and return the JSON object it prints, unchanged.`,
+    `Run this one command from ${cfg.repo}. It prints one JSON object.`,
+    'Return {"raw": "<the JSON text it printed>"}: the exact text, with no field changed, added or dropped. Do not summarise it.',
     "Give the Bash call a timeout of 600000 ms. Exit codes 1 and 2 are normal. Run nothing else.",
     "",
     command,
@@ -348,13 +344,16 @@ async function run(cfg: Config): Promise<Result> {
   };
 
   const relay = async (label: string, command: string, nonce: string | null, phaseTitle: string) => {
-    const res = await agent(relayPrompt(cfg, command), {
+    const wrapped = await agent(relayPrompt(cfg, command), {
       agentType: "ratchet:relay",
       schema: RELAY_SCHEMA,
       model: cfg.models.relay || "haiku",
       label,
       phase: phaseTitle,
     });
+    const parsed = parseRelay(wrapped);
+    if (!parsed.ok) throw stop("harness-error", `Relay ${label} failed. ${parsed.reason}`);
+    const res = parsed.value;
     const check = verifyRelay(res, nonce);
     if (!check.ok) throw stop("harness-error", `Relay ${label} failed. ${check.reason}`);
     return res;

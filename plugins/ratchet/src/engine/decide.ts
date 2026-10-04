@@ -210,6 +210,33 @@ export function makeNonce(base: string, counter: number): string {
 }
 
 // A nonce check proves that the relay answered this command. It cannot prove that the relay ran it.
+// The Workflow runtime keeps only the properties that an agent's schema declares, and every
+// RS command prints fields of its own. So the relay hands back the printed text, and the
+// engine parses it here: the object from the first "{" to the last "}", or else the last
+// line that is an object (when the text holds two).
+export function parseRelay(wrapped: unknown): { ok: true; value: any } | { ok: false; reason: string } {
+  const raw = wrapped && typeof wrapped === "object" ? (wrapped as { raw?: unknown }).raw : undefined;
+  if (typeof raw !== "string" || raw.trim() === "") return { ok: false, reason: "The relay returned no text." };
+  const asObject = (text: string) => {
+    try {
+      const value = JSON.parse(text);
+      return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+    } catch {
+      return null;
+    }
+  };
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  const whole = first >= 0 && last > first ? asObject(raw.slice(first, last + 1)) : null;
+  if (whole) return { ok: true, value: whole };
+  const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("{")).reverse();
+  for (const line of lines) {
+    const value = asObject(line);
+    if (value) return { ok: true, value };
+  }
+  return { ok: false, reason: `The relay text holds no JSON object: ${clip(raw, 160)}` };
+}
+
 export function verifyRelay(res: any, nonce: string | null): { ok: boolean; reason: string } {
   if (!res || typeof res !== "object" || Array.isArray(res)) {
     return { ok: false, reason: "The relay returned no result." };

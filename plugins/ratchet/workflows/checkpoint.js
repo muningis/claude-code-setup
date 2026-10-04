@@ -151,6 +151,32 @@ function gateCommand(rs, gate, slug, cp, nonce, round, extra = []) {
 function makeNonce(base, counter) {
   return `${base}-${counter}`;
 }
+function parseRelay(wrapped) {
+  const raw = wrapped && typeof wrapped === "object" ? wrapped.raw : undefined;
+  if (typeof raw !== "string" || raw.trim() === "")
+    return { ok: false, reason: "The relay returned no text." };
+  const asObject = (text) => {
+    try {
+      const value = JSON.parse(text);
+      return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+    } catch {
+      return null;
+    }
+  };
+  const first = raw.indexOf("{");
+  const last = raw.lastIndexOf("}");
+  const whole = first >= 0 && last > first ? asObject(raw.slice(first, last + 1)) : null;
+  if (whole)
+    return { ok: true, value: whole };
+  const lines = raw.split(`
+`).map((l) => l.trim()).filter((l) => l.startsWith("{")).reverse();
+  for (const line of lines) {
+    const value = asObject(line);
+    if (value)
+      return { ok: true, value };
+  }
+  return { ok: false, reason: `The relay text holds no JSON object: ${clip(raw, 160)}` };
+}
 function verifyRelay(res, nonce) {
   if (!res || typeof res !== "object" || Array.isArray(res)) {
     return { ok: false, reason: "The relay returned no result." };
@@ -225,16 +251,8 @@ const STRINGS = { type: "array", items: { type: "string" } };
 const LEVELS = ["high", "medium", "low"];
 const RELAY_SCHEMA = {
   type: "object",
-  additionalProperties: true,
-  properties: {
-    ok: { type: "boolean" },
-    cmd: { type: "string" },
-    nonce: { type: ["string", "null"] },
-    verdict: { type: "string", enum: ["pass", "fail", "error", "pending"] },
-    summary: { type: "string" },
-    job: { type: "string" }
-  },
-  required: ["ok"]
+  properties: { raw: { type: "string" } },
+  required: ["raw"]
 };
 const FINDING_ID = { type: "string", pattern: "^[A-Za-z0-9._-]+-[AB][0-9]+-[0-9]+$" };
 const VISUAL_ID = { type: "string", pattern: "^[A-Za-z0-9._-]+-V[0-9]+-[0-9]+$" };
@@ -349,7 +367,8 @@ function agentOpts(agentType, label, phaseTitle, schema, model) {
 }
 function relayPrompt(cfg, command) {
   return [
-    `Run this one command from ${cfg.repo} and return the JSON object it prints, unchanged.`,
+    `Run this one command from ${cfg.repo}. It prints one JSON object.`,
+    'Return {"raw": "<the JSON text it printed>"}: the exact text, with no field changed, added or dropped. Do not summarise it.',
     "Give the Bash call a timeout of 600000 ms. Exit codes 1 and 2 are normal. Run nothing else.",
     "",
     command
@@ -476,13 +495,17 @@ async function run(cfg) {
       evidence[name] = paths;
   };
   const relay = async (label, command, nonce, phaseTitle) => {
-    const res = await agent(relayPrompt(cfg, command), {
+    const wrapped = await agent(relayPrompt(cfg, command), {
       agentType: "ratchet:relay",
       schema: RELAY_SCHEMA,
       model: cfg.models.relay || "haiku",
       label,
       phase: phaseTitle
     });
+    const parsed = parseRelay(wrapped);
+    if (!parsed.ok)
+      throw stop("harness-error", `Relay ${label} failed. ${parsed.reason}`);
+    const res = parsed.value;
     const check = verifyRelay(res, nonce);
     if (!check.ok)
       throw stop("harness-error", `Relay ${label} failed. ${check.reason}`);
