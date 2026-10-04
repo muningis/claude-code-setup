@@ -1,12 +1,17 @@
-"""dream apply <date> --accept <ids> --reject <ids> [--reason <text>]: write what the human decided.
+"""dream apply <bundle> --accept <ids> --reject <ids> [--reason <text>]: write what the human decided.
 
-Edits learnings.md one entry at a time. Then it pins the new learnings.md again in each plan, so
-that the next b1 gate does not stop on "state files changed"."""
+An accepted item goes to one of three targets:
+  global   a rule file in ~/.claude/rules/dream/, which claude loads in every project
+  project  a feedback memory file in the auto-memory folder of one project, with its MEMORY.md line
+  ratchet  an entry of learnings.md in one repo, which is then pinned again in each plan
+
+Every accepted item is checked before any file changes, so a bad item changes nothing."""
 from __future__ import annotations
 
 import json
 import os
 import re
+import shutil
 import sys
 
 import common
@@ -14,9 +19,10 @@ import dream_curate
 import dream_io
 import dream_learn
 from common import RsError
-from dream_scrub import clean
+from dream_scrub import clean, scrub
 
 LEARNINGS = ".claude/ratchet/learnings.md"
+SLUG = re.compile(r"^[a-z0-9][a-z0-9-]{0,60}$")
 
 
 def take_all(argv, flags):
@@ -64,18 +70,18 @@ def source_of(item, bid):
     return ", ".join(refs[:3]) + (" (+%d more)" % (len(refs) - 3) if len(refs) > 3 else "")
 
 
-def apply_item(text, item, bid):
-    """(new text, entry ID) after one accepted item. It checks the item again: the human may have edited it."""
+def apply_learnings(text, item, bid):
+    """(new text, entry ID) after one accepted ratchet item. It checks the item again: the human may have edited it."""
     iid = item.get("id")
     op = str(item.get("op") or "").upper()
     if op not in dream_curate.OPS:
         raise RsError("%s: unknown op %r" % (iid, item.get("op")))
-    targets = [] if op == "ADD" else dream_curate.split_targets(item.get("target"))
-    if op in ("EDIT", "RETIRE") and len(targets) != 1 or op == "MERGE" and len(targets) < 2:
-        raise RsError("%s: %s has the wrong number of targets" % (iid, op))
+    ids = [] if op == "ADD" else dream_curate.id_list(item.get("entry"))
+    if op in ("EDIT", "RETIRE") and len(ids) != 1 or op == "MERGE" and len(ids) < 2:
+        raise RsError("%s: %s has the wrong number of entries" % (iid, op))
     _, entries, _ = dream_learn.parse(text)
     live = dict((e["id"], e) for e in entries)
-    for t in targets:
+    for t in ids:
         if t not in live or live[t]["status"] != "active":
             raise RsError("%s: %s is not an active entry of learnings.md" % (iid, t))
     scope_list = dream_curate.scope_of(item.get("scope"))
@@ -94,11 +100,11 @@ def apply_item(text, item, bid):
             text = "# Learnings\n\n"
         return dream_learn.append(text, dream_learn.render(eid, scope, rule, check, source)), eid
     if op == "RETIRE":
-        return dream_learn.retire(text, targets[0]), targets[0]
-    text = dream_learn.edit(text, targets[0], scope, rule, check)
-    for other in targets[1:]:
-        text = dream_learn.retire(text, other, "merged into %s by dream %s" % (targets[0], bid))
-    return text, targets[0]
+        return dream_learn.retire(text, ids[0]), ids[0]
+    text = dream_learn.edit(text, ids[0], scope, rule, check)
+    for other in ids[1:]:
+        text = dream_learn.retire(text, other, "merged into %s by dream %s" % (ids[0], bid))
+    return text, ids[0]
 
 
 def state_pins(root):
@@ -160,6 +166,137 @@ def relock(root, bdir, pins):
     return pinned, stale, None
 
 
+class Plan(object):
+    """The writes of one apply. An item adds its writes after it passed its checks; commit() makes them."""
+
+    def __init__(self, bid, known):
+        self.bid = bid
+        self.today = dream_io.utc_date()
+        self.known = known
+        self.learn = {}
+        self.files = {}
+        self.index = {}
+        self.moves = []
+        self.gids = []
+        self.skipped = []
+
+    def learnings_text(self, repo):
+        if repo not in self.learn:
+            before = dream_io.read_exact(dream_io.learnings_path(repo))
+            self.learn[repo] = [before, before]
+        return self.learn[repo][1]
+
+    def index_text(self, mdir):
+        if mdir not in self.index:
+            before = dream_io.read_exact(os.path.join(mdir, "MEMORY.md"))
+            self.index[mdir] = [before, before]
+        return self.index[mdir][1]
+
+    def commit(self):
+        for repo, (before, text) in self.learn.items():
+            if text != before:
+                dream_io.write_exact(dream_io.learnings_path(repo), text)
+        for path, text in self.files.items():
+            dream_io.write_exact(path, text)
+        for mdir, (before, text) in self.index.items():
+            if text != before:
+                dream_io.write_exact(os.path.join(mdir, "MEMORY.md"), text)
+        for src, dst in self.moves:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.move(src, dst)
+
+
+def retired_name(path):
+    """Where a retired rule file goes. A name that is taken gets a number, so no file is overwritten."""
+    base = os.path.join(dream_io.retired_dir(), os.path.basename(path))
+    out, n = base, 1
+    while os.path.exists(out):
+        n += 1
+        out = "%s.%d" % (base, n)
+    return out
+
+
+def plan_global(plan, item):
+    iid, op = item["id"], str(item.get("op") or "").upper()
+    rule = dream_curate.one_line(item.get("rule"))
+    why = dream_curate.one_line(item.get("why"))
+    problem = dream_curate.words_problem(op, rule, why)
+    if problem:
+        raise RsError("%s: %s" % (iid, problem))
+    paths, problem = dream_curate.paths_of(item.get("paths"))
+    if problem:
+        raise RsError("%s: %s" % (iid, problem))
+    if op == "ADD":
+        gid = dream_learn.next_gid(plan.gids)
+        plan.gids.append(gid)
+        path = os.path.join(dream_io.rules_dir(), "%s-%s.md" % (gid, dream_learn.slugify(rule)))
+        if os.path.exists(path) or path in plan.files:
+            raise RsError("%s: %s exists already" % (iid, path))
+        plan.files[path] = dream_learn.render_rule(gid, rule, why, paths or [], plan.bid, plan.today)
+        return gid
+    ids = dream_curate.id_list(item.get("entry"))
+    if op not in ("EDIT", "RETIRE") or len(ids) != 1:
+        raise RsError("%s: a global rule supports ADD, EDIT and RETIRE of one rule" % iid)
+    found = [(path, parsed) for gid, path, parsed in dream_learn.rule_files() if gid == ids[0]]
+    if not found:
+        raise RsError("%s: %s is not an active global rule" % (iid, ids[0]))
+    path, old = found[0]
+    if op == "RETIRE":
+        plan.moves.append((path, retired_name(path)))
+        return ids[0]
+    plan.files[path] = dream_learn.render_rule(
+        ids[0], rule, why, old["paths"] if paths is None else paths, plan.bid, old["added"] or plan.today,
+        edited=plan.today)
+    return ids[0]
+
+
+def plan_project(plan, item):
+    iid = item["id"]
+    project = str(item.get("project") or "")
+    if str(item.get("op") or "").upper() != "ADD":
+        raise RsError("%s: a project memory supports ADD only" % iid)
+    if not project or project in (".", "..") or "/" in project or "\\" in project:
+        raise RsError("%s: bad project folder %r" % (iid, project))
+    if plan.known is not None and project not in plan.known["projects"]:
+        raise RsError("%s: project %r has no human turn in this harvest" % (iid, project))
+    if not os.path.isdir(os.path.join(dream_io.projects_dir(), project)):
+        raise RsError("%s: no project folder %r" % (iid, project))
+    rule = dream_curate.one_line(item.get("rule"))
+    why = dream_curate.one_line(item.get("why"))
+    how = dream_curate.one_line(item.get("apply")) or rule
+    problem = dream_curate.words_problem("ADD", rule, why)
+    if problem:
+        raise RsError("%s: %s" % (iid, problem))
+    if scrub(how) != how:
+        raise RsError("%s: the apply text holds a secret" % iid)
+    mdir = os.path.join(dream_io.projects_dir(), project, "memory")
+    slug = item.get("newId") if SLUG.match(str(item.get("newId") or "")) else dream_learn.slugify(rule)
+    path = os.path.join(mdir, slug + ".md")
+    if os.path.exists(path) or path in plan.files:
+        plan.skipped.append({"id": iid, "reason": "the memory file %s exists already" % slug})
+        return None
+    desc = dream_learn.memory_description(rule)
+    plan.files[path] = dream_learn.render_memory(slug, desc, rule, why, how)
+    plan.index_text(mdir)
+    plan.index[mdir][1] = dream_learn.append_index(plan.index[mdir][1], dream_learn.index_line(slug, desc))
+    return slug
+
+
+def plan_ratchet(plan, item):
+    iid = item["id"]
+    repo = str(item.get("repo") or "")
+    if not os.path.isabs(repo) or not os.path.isdir(os.path.join(repo, ".claude", "ratchet")):
+        raise RsError("%s: %r is not a repo with ratchet state" % (iid, repo))
+    if plan.known is not None and repo not in plan.known["repos"]:
+        raise RsError("%s: repo %s has no ratchet evidence in this harvest" % (iid, repo))
+    text, eid = apply_learnings(plan.learnings_text(repo), item, plan.bid)
+    plan.learn[repo][1] = text
+    return eid
+
+
+PLANNERS = {"global": plan_global, "project": plan_project, "ratchet": plan_ratchet}
+
+
 def main(argv):
     try:
         rest, many = take_all(argv, ("--accept", "--reject"))
@@ -170,10 +307,10 @@ def main(argv):
 
     def go():
         if len(pos) != 1:
-            raise RsError("usage: dream apply <date> --accept <ids> --reject <ids> [--reason <text>]")
-        root = common.repo_root()
+            raise RsError("usage: dream apply <bundle> --accept <ids> --reject <ids> [--reason <text>]")
+        home = dream_io.home_dir()
         bid = dream_io.check_bundle(pos[0])
-        bdir = dream_io.bundle_dir(root, bid)
+        bdir = dream_io.bundle_dir(bid)
         review = os.path.join(bdir, "review.json")
         if os.path.isfile(review):
             raise RsError("dream %s is reviewed already" % bid)
@@ -184,48 +321,69 @@ def main(argv):
         by_id = dict((it["id"], it) for it in items)
         accept, reject = decide(many, by_id)
 
-        path = dream_io.learnings_path(root)
-        before = dream_io.read_exact(path)
-        pins = state_pins(root)
-        text = before
+        # The harvest says which projects and repos this dream saw. A proposal may not name another one.
+        harvest = common.read_json(os.path.join(bdir, "harvest.json"), default=None)
+        known = None
+        if isinstance(harvest, dict):
+            known = {"projects": set(harvest.get("projects") or {}), "repos": set(harvest.get("ratchet") or {})}
+        plan = Plan(bid, known)
+        pins = {}
+        for it in items:
+            if it["id"] in accept and it.get("target") == "ratchet" and it.get("repo") not in pins:
+                pins[it.get("repo")] = state_pins(str(it.get("repo")))
         done = []
         for it in items:
-            if it["id"] in accept:
-                text, eid = apply_item(text, it, bid)
-                done.append({"id": it["id"], "op": str(it["op"]).upper(), "entry": eid})
+            if it["id"] not in accept:
+                continue
+            planner = PLANNERS.get(it.get("target"))
+            if planner is None:
+                raise RsError("%s: unknown target %r" % (it["id"], it.get("target")))
+            got = planner(plan, it)
+            if got is not None:
+                done.append({"id": it["id"], "op": str(it["op"]).upper(), "target": it["target"], "entry": got})
         # Nothing is written before every item passed its checks, so a bad item changes nothing.
-        if text != before:
-            dream_io.write_exact(path, text)
+        plan.commit()
 
         reason = clean(opts.get("--reason") or "") or "no reason given"
         lines = [json.dumps({"date": dream_io.utc_date(), "bundle": bid, "op": str(by_id[i].get("op") or "").upper(),
-                             "target": by_id[i].get("target"), "rule": clean(by_id[i].get("rule") or ""),
-                             "reason": reason}, ensure_ascii=False, separators=(",", ":")) + "\n" for i in reject]
+                             "target": by_id[i].get("target"), "entry": by_id[i].get("entry"),
+                             "rule": clean(by_id[i].get("rule") or ""), "reason": reason},
+                            ensure_ascii=False, separators=(",", ":")) + "\n" for i in reject]
         if lines:
-            common.append_text(dream_io.rejected_path(root), "".join(lines))
+            common.append_text(dream_io.rejected_path(), "".join(lines))
 
-        pinned, stale, problem = relock(root, bdir, pins) if text != before else ([], [], None)
-        # The review file comes before any error: the learnings changed, so a second apply must not run.
+        pinned, stale, problem = [], [], None
+        for repo, repo_pins in pins.items():
+            if plan.learn.get(repo) and plan.learn[repo][0] != plan.learn[repo][1]:
+                p, s, prob = relock(repo, bdir, repo_pins)
+                pinned += p
+                stale += s
+                problem = problem or prob
+        # The review file comes before any error: the files changed, so a second apply must not run.
         common.write_json(review, {
             "bundle": bid, "reviewed": common.now_iso(), "reason": reason if reject else None,
-            "accepted": done, "rejected": reject, "relocked": pinned, "stalePins": stale})
+            "accepted": done, "rejected": reject, "skipped": plan.skipped, "relocked": pinned, "stalePins": stale})
+        dream_io.refresh_pending()
         if problem:
             raise RsError("applied, but %s; run RS lock on it, with learnings.md in a list file" % problem)
 
         summary = "accepted %d, rejected %d" % (len(done), len(reject))
         if done:
             summary += " (%s)" % ", ".join("%s %s" % (d["op"], d["entry"]) for d in done)
+        if plan.skipped:
+            summary += "; skipped %d (already there)" % len(plan.skipped)
         if stale:
             summary += "; %d stale pin left alone" % len(stale)
         # RS learnings reads entries only. Once one exists, bullets outside entries (version 1) stop reaching agents.
-        _, entries, bullets = dream_learn.parse(text)
         warnings = []
-        if entries and bullets:
-            warnings.append("%d bullet(s) of learnings.md sit outside any entry, and RS learnings ignores them"
-                            % len(bullets))
-        return common.emit("dream apply", "pass", summary, evidence=review, nonce=nonce, root=root,
-                           extra={"bundle": bid, "accepted": done, "rejected": reject, "relocked": len(pinned),
-                                  "stalePins": stale, "warnings": warnings})
+        for repo, (before, text) in plan.learn.items():
+            _, entries, bullets = dream_learn.parse(text)
+            if entries and bullets:
+                warnings.append("%d bullet(s) of learnings.md sit outside any entry, and RS learnings ignores them"
+                                % len(bullets))
+        return common.emit("dream apply", "pass", summary, evidence=review, nonce=nonce, root=home,
+                           extra={"bundle": bid, "accepted": done, "rejected": reject, "skipped": plan.skipped,
+                                  "relocked": len(pinned), "stalePins": stale, "warnings": warnings})
 
     return common.run_guarded("dream apply", nonce, go)
 

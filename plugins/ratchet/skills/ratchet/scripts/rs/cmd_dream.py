@@ -1,7 +1,8 @@
 """dream <step>: the learning loop. See references/dream.md.
 
-harvest, curate, apply, install, uninstall and register are the steps of the loop. Two more serve
-dream-nightly.sh: `repos` lists the repos that opted in, and `prompt` writes the reflection prompt."""
+harvest, curate, apply, install, uninstall are the steps of the loop. Two more serve dream-nightly.sh and
+the router: `prompt` writes the reflection prompt, and `state` says whether a dream is due. Every step
+runs from any folder: the dream is global, and its files live under the home folder."""
 from __future__ import annotations
 
 import sys
@@ -18,9 +19,8 @@ STEPS = {
     "apply": dream_apply.main,
     "install": dream_sched.install,
     "uninstall": dream_sched.uninstall,
-    "register": dream_sched.register,
-    "repos": dream_sched.repos,
     "prompt": dream_sched.prompt,
+    "state": dream_sched.state,
 }
 
 

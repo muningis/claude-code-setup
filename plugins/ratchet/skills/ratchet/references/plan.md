@@ -118,7 +118,5 @@ Then call ExitPlanMode. The human approves or edits.
    `dreams/`.
 5. For each change document, set `status: approved` and run `RS doclint --approve <file>`.
 6. Add the change to `docs/changes/index.md`.
-7. Run `RS dream register`, so that the nightly dream can read this repo. It runs only
-   when `dream.nightly` is true.
-8. Continue with `run.md` for the first row. Run interactive, unless the human asked for
+7. Continue with `run.md` for the first row. Run interactive, unless the human asked for
    `--auto`. Do not ask for approval again.

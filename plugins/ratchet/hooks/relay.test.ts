@@ -180,6 +180,31 @@ describe('the --relay flag', () => {
   })
 })
 
+describe('dream proposals', () => {
+  const START = { cwd: ROOT, surface: 'terminal', isInteractive: true } as const
+  const PENDING = '.claude/ratchet/dreams/pending.json'
+
+  test('are announced at session start from the index under home', async ($, on) => {
+    const index = { bundles: [{ bundle: '2026-10-05', items: 2 }, { bundle: '2026-10-06', items: 1 }] }
+    const { seen } = stage($, on, { [`/Users/me/${PENDING}`]: JSON.stringify(index) })
+    on('env.get', () => ({ value: '/Users/me' }))
+    await $.session.start(START)
+    expect(seen.logs).toEqual(['🦝 3 dream proposals wait for you · /ratchet dream'])
+  })
+
+  test('say nothing without an index, or with an empty or broken one', async ($, on) => {
+    const files: Record<string, string> = {}
+    const { seen } = stage($, on, files)
+    on('env.get', () => ({ value: '/Users/me' }))
+    for (const text of [undefined, '{"bundles": []}', '{"bundles": ']) {
+      if (text === undefined) delete files[`/Users/me/${PENDING}`]
+      else files[`/Users/me/${PENDING}`] = text
+      await $.session.start(START)
+    }
+    expect(seen.logs).toEqual([])
+  })
+})
+
 describe('the status line', () => {
   const LIVE = '.claude/ratchet/live.json'
   const START = { cwd: ROOT, surface: 'terminal', isInteractive: true } as const

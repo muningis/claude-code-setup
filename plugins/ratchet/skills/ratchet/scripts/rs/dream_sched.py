@@ -1,4 +1,4 @@
-"""The scheduling side of the dream: the launchd job, the repo list, and two steps for dream-nightly.sh."""
+"""The scheduling side of the dream: the launchd job, the state of the dream, and the reflection prompt."""
 from __future__ import annotations
 
 import os
@@ -6,7 +6,6 @@ import plistlib
 import re
 import shlex
 import shutil
-import sys
 import time
 
 import common
@@ -16,20 +15,18 @@ from common import RsError
 LABEL = "com.ratchet.dream"
 HOUR, MINUTE = 3, 30
 PROMPT_TAIL = """
-## Paths for this run
+## Files for this run
 
-All paths are absolute. The paths inside harvest.json are relative to the repo root: {root}
+You run inside the dream folder, and you can read only inside it. Every path is relative to it.
 
-- harvest.json: {harvest}
-- learnings.md: {learnings} (it may not exist)
-- stack library: {stacks} (read the files in it when the folder exists)
-- rejected.jsonl: {rejected} (it may not exist)
-- candidates.json: {candidates} (write your output here)
+- harvest.json: the facts of the window. It can be long: read it in parts, with offset and limit.
+- context/global-rules.md: the active global rules, each with its id
+- context/memory-<project>.md: the MEMORY.md index of each project that has human turns
+- context/ratchet-<n>-learnings.md: the learnings of one repo (context/ratchet-map.json names the repo of each n)
+- context/rejected.jsonl: items that the human rejected
+- candidates.json: write your output here
 
-harvest.json can be long. Read it in parts, with offset and limit.
-Cite evidence as `<path>:<line>` or `<path>#<finding id>`. Take each path from harvest.json.
-Write only candidates.json. Change no other file. Read only the files named above and the
-evidence files that harvest.json names.
+Write only candidates.json. Change no other file.
 """
 
 
@@ -43,17 +40,6 @@ def plist_path():
 
 def domain():
     return "gui/%d" % os.getuid()
-
-
-def add_repo(root):
-    """Add the repo to repos.json. Returns False when it was there already."""
-    if re.search(r"[\t\r\n]", root):
-        raise RsError("the repo path holds a tab or a newline")
-    repos = dream_io.read_repos()
-    if root in repos:
-        return False
-    dream_io.write_repos(repos + [root])
-    return True
 
 
 def launchd_env():
@@ -108,7 +94,6 @@ def install(argv):
     def go():
         if pos:
             raise RsError("usage: dream install [--load]")
-        root = common.repo_root()
         script = os.path.join(os.path.dirname(common.rs_script()), "dream-nightly.sh")
         if not os.path.isfile(script):
             raise RsError("missing %s" % script)
@@ -126,14 +111,15 @@ def install(argv):
         with open(tmp, "wb") as f:
             plistlib.dump(data, f)
         os.replace(tmp, plist)
-        added = add_repo(root)
+        created = dream_io.write_default_config()
+        cfg = dream_io.load_config()
 
         command = "launchctl bootstrap %s %s" % (domain(), shlex.quote(plist))
         warnings = []
         if not claude:
             warnings.append("claude not found: set RATCHET_CLAUDE and run install again")
-        if common.load_config(root, required=False)["dream"].get("nightly") is not True:
-            warnings.append("dream.nightly is not true in this repo's config, so the job skips it")
+        if cfg["nightly"] is not True:
+            warnings.append("nightly is not true in dream.json, so the job skips every night")
         loaded = False
         if opts.get("--load"):
             # bootstrap fails on a label that is loaded already, so unload it first.
@@ -144,9 +130,9 @@ def install(argv):
             loaded = True
         summary = "wrote the plist for %02d:%02d" % (HOUR, MINUTE)
         summary += "; the job is loaded" if loaded else "; load it with: %s" % command
-        return common.emit("dream install", "pass", summary, nonce=opts.get("--nonce"), root=root,
-                           extra={"plistAbs": plist, "logAbs": log, "reposAbs": dream_io.repos_path(),
-                                  "repoAdded": added, "loaded": loaded, "command": command,
+        return common.emit("dream install", "pass", summary, nonce=opts.get("--nonce"),
+                           extra={"plistAbs": plist, "logAbs": log, "configAbs": dream_io.config_path(),
+                                  "configCreated": created, "loaded": loaded, "command": command,
                                   "warnings": warnings})
 
     return common.run_guarded("dream install", opts.get("--nonce"), go)
@@ -179,48 +165,35 @@ def uninstall(argv):
     return common.run_guarded("dream uninstall", opts.get("--nonce"), go)
 
 
-def register(argv):
+def state(argv):
+    """One line: due, recent, pending or off, with the number of proposals that wait for a review."""
     try:
         pos, opts = common.parse_args(argv, value_flags=("--nonce",))
     except RsError as e:
-        return common.emit("dream register", "error", str(e), harness_error=str(e))
+        return common.emit("dream state", "error", str(e), harness_error=str(e))
 
     def go():
         if pos:
-            raise RsError("usage: dream register")
-        root = common.repo_root()
-        added = add_repo(root)
-        return common.emit("dream register", "pass", "registered" if added else "already registered",
-                           nonce=opts.get("--nonce"), root=root,
-                           extra={"added": added, "reposAbs": dream_io.repos_path(),
-                                  "repos": len(dream_io.read_repos())})
+            raise RsError("usage: dream state")
+        cfg = dream_io.load_config()
+        pending = dream_io.pending_bundles()
+        last = dream_io.last_epoch(dream_io.read_last())
+        if pending:
+            st = "pending"
+        elif cfg["nightly"] is not True:
+            st = "off"
+        elif last is not None and (time.time() - last) < dream_io.NIGHTLY_HOURS * 3600:
+            st = "recent"
+        else:
+            st = "due"
+        dream_io.refresh_pending()
+        waiting = sum(dream_io.pending_items(b) for b in pending)
+        return common.emit("dream state", "pass", "the dream is %s" % st, nonce=opts.get("--nonce"),
+                           root=dream_io.home_dir(),
+                           extra={"state": st, "pending": waiting, "bundle": pending[0] if pending else None,
+                                  "budgetUsd": cfg["budgetUsd"], "last": dream_io.iso_of(last) if last else None})
 
-    return common.run_guarded("dream register", opts.get("--nonce"), go)
-
-
-def repos(argv):
-    """One line for each repo that opted in: path, budget in USD and state, split by tabs. For the shell."""
-    try:
-        for path in dream_io.read_repos():
-            if not os.path.isdir(path):
-                sys.stdout.write("%s\t0\tmissing\n" % path)
-                continue
-            dream = common.load_config(path, required=False).get("dream") or {}
-            if dream.get("nightly") is not True:
-                continue
-            budget = dream.get("budgetUsd")
-            ok = isinstance(budget, (int, float)) and not isinstance(budget, bool) and budget > 0
-            if dream_io.pending_bundles(path):
-                state = "pending"
-            else:
-                last = dream_io.last_epoch(dream_io.read_last(path))
-                recent = last is not None and (time.time() - last) < dream_io.NIGHTLY_HOURS * 3600
-                state = "recent" if recent else "due"
-            sys.stdout.write("%s\t%s\t%s\n" % (path, "%g" % budget if ok else "2", state))
-    except RsError as e:
-        sys.stderr.write("ratchet: %s\n" % e)
-        return 2
-    return 0
+    return common.run_guarded("dream state", opts.get("--nonce"), go)
 
 
 def reflect_parts():
@@ -247,20 +220,17 @@ def prompt(argv):
 
     def go():
         if len(pos) != 1:
-            raise RsError("usage: dream prompt <date>")
-        root = common.repo_root()
+            raise RsError("usage: dream prompt <bundle>")
+        cfg = dream_io.load_config()
         bid = dream_io.check_bundle(pos[0])
-        bdir = dream_io.bundle_dir(root, bid)
+        bdir = dream_io.bundle_dir(bid)
         if not os.path.isfile(os.path.join(bdir, "harvest.json")):
             raise RsError("no harvest.json in dream %s" % bid)
         body, model = reflect_parts()
-        tail = PROMPT_TAIL.format(
-            root=root, harvest=os.path.join(bdir, "harvest.json"), learnings=dream_io.learnings_path(root),
-            stacks=os.path.join(dream_io.ratchet_home(), "stacks"), rejected=dream_io.rejected_path(root),
-            candidates=os.path.join(bdir, "candidates.json"))
         out = os.path.join(bdir, "prompt.md")
-        common.write_text(out, body + "\n" + tail)
+        common.write_text(out, body + "\n" + PROMPT_TAIL)
         return common.emit("dream prompt", "pass", "prompt written for dream %s" % bid, evidence=out,
-                           nonce=opts.get("--nonce"), root=root, extra={"bundle": bid, "model": model})
+                           nonce=opts.get("--nonce"), root=dream_io.home_dir(),
+                           extra={"bundle": bid, "model": model, "budgetUsd": cfg["budgetUsd"]})
 
     return common.run_guarded("dream prompt", opts.get("--nonce"), go)

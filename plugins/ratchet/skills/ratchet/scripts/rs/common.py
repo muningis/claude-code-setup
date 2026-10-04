@@ -356,7 +356,7 @@ def default_config():
         "standing": {"commit": "ask", "afterLock": [], "notify": True},
         "docs": {"root": "docs", "ste": "lite"},
         "relay": True,
-        "dream": {"nightly": False, "maxItems": 3, "budgetUsd": 2},
+        "dream": {"stacks": []},
     }
 
 

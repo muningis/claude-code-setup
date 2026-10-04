@@ -134,3 +134,17 @@ The human reversed the trade-off "Both stay". Ratchet is now the one workflow pl
   handovers that baton wrote.
 - Step 1 of `plan.md` treats a config with only `checks` as no config, because verify
   can write such a config.
+
+### 2026-10-04 · 2.1: the dream reads every session
+
+The human asked the dream to read all sessions in `~/.claude`, not one registered repo.
+Only one repo had ratchet evidence, and most work never goes through a ratchet run.
+
+- The harvest reads `~/.claude/projects/` after the last dream. It takes the human
+  prompts with tags, the agent friction, and the ratchet evidence of those repos.
+- Approved rules go to `~/.claude/rules/dream/` (each session, or matching files with
+  `paths`), to the auto-memory of one project, or to a repo's `learnings.md`.
+- The reflection runs sealed: `--safe-mode --restricted --no-session-persistence`, in
+  the bundle folder. A live check under launchd proved these flags and the login.
+- Code counts the recurrence from the cited harvest items. It never uses a model count.
+- `repos.json`, `dream register` and the per-repo `dream` config are gone.

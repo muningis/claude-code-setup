@@ -68,8 +68,8 @@
 #   learnings --scope <path>...
 #                              the learnings that apply to these paths (markdown, not JSON)
 #   keepawake start|stop       keep a Mac awake during a run, with caffeinate
-#   dream harvest|curate|apply|install|uninstall|register ...
-#                              the learning loop of references/dream.md
+#   dream harvest|curate|apply|prompt|state|install|uninstall ...
+#                              the learning loop of references/dream.md; it works from any folder
 
 set -euo pipefail
 

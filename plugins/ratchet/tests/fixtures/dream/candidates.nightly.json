@@ -1,1 +1,1 @@
-{"candidates":[{"op":"ADD","target":null,"scope":"mobile/**","rule":"Dismiss the keyboard from every native text field with the Done key.","check":"A UI test presses Done and expects no focus.","evidence":["demo/cp1/4-human.md:1"],"counter":[],"rows":1}]}
+{"candidates":[{"op":"ADD","target":"global","rule":"Run the formatter before every commit.","why":"The human asked for it in plain words.","paths":["**/*.ts"],"evidence":["cccccccc#2"]}]}

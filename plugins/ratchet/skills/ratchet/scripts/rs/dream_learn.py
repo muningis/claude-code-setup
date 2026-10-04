@@ -1,9 +1,14 @@
-"""Read and change learnings.md one entry at a time. Lines that an edit does not touch stay as they are."""
+"""Read and change learnings.md one entry at a time. Lines that an edit does not touch stay as they are.
+
+The second half writes the other two targets of a dream: a global rule file, and an auto-memory file."""
 from __future__ import annotations
 
+import json
+import os
 import re
 
 import cmd_learnings
+import dream_io
 from common import RsError
 
 FIELD = re.compile(r"^-\s*(scope|rule|check|source|origin)\s*:\s*(.*?)\s*$", re.I)
@@ -140,3 +145,144 @@ def append(text, entry_text):
     if text and not text.endswith("\n\n"):
         text += "\n"
     return text + entry_text
+
+
+# ---------------------------------------------------------------- global rule files
+
+FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
+GID = re.compile(r"^G-(\d+)")
+
+
+def slugify(text, words=6, limit=40):
+    """A file-name stem from the first words of a text: lowercase letters, digits and hyphens."""
+    out = "-".join(re.findall(r"[a-z0-9]+", str(text).lower())[:words])[:limit].strip("-")
+    return out or "rule"
+
+
+def yaml_scalar(text):
+    """The text as a YAML value: plain when that is safe, else a double-quoted JSON string."""
+    t = " ".join(str(text).split())
+    if re.match(r"[A-Za-z0-9(]", t) and not re.search(r":(\s|$)|\s#|\s$", t):
+        return t
+    return json.dumps(t, ensure_ascii=False)
+
+
+def render_rule(gid, rule, why, paths, source, added, edited=None):
+    """The text of a rule file. Claude Code reads only `paths` from the frontmatter and drops the rest."""
+    fm = []
+    if paths:
+        fm.append("paths:")
+        fm.extend("  - %s" % json.dumps(p, ensure_ascii=False) for p in paths)
+    fm += ["dream-id: %s" % gid, "source: %s" % source, "added: %s" % added]
+    if edited:
+        fm.append("edited: %s" % edited)
+    body = rule.strip() + ("\n\nWhy: %s" % why.strip() if why and why.strip() else "")
+    return "---\n%s\n---\n%s\n" % ("\n".join(fm), body)
+
+
+def parse_rule(text):
+    """{id, paths, source, added, rule, why} of a rule file that the dream wrote, or None for any other file."""
+    m = FRONTMATTER.match(text)
+    if not m:
+        return None
+    fields = {}
+    paths = []
+    in_paths = False
+    for line in m.group(1).splitlines():
+        item = re.match(r"^\s+-\s+(.*?)\s*$", line)
+        if in_paths and item:
+            raw = item.group(1)
+            try:
+                paths.append(json.loads(raw) if raw.startswith('"') else raw.strip("'"))
+            except ValueError:
+                paths.append(raw)
+            continue
+        in_paths = False
+        if line.startswith("paths:"):
+            in_paths = True
+            continue
+        kv = re.match(r"^([A-Za-z-]+):\s*(.*?)\s*$", line)
+        if kv:
+            fields[kv.group(1)] = kv.group(2)
+    if not re.fullmatch(r"G-\d+", fields.get("dream-id", "")):
+        return None
+    rule, _, why = m.group(2).strip().partition("\n\nWhy:")
+    return {"id": fields["dream-id"], "paths": paths, "source": fields.get("source", ""),
+            "added": fields.get("added", ""), "rule": rule.strip(), "why": why.strip()}
+
+
+def rule_id(text):
+    got = parse_rule(text)
+    return got["id"] if got else None
+
+
+def rule_files():
+    """[(id, path, parsed)] for each active rule file of the dream folder."""
+    base = dream_io.rules_dir()
+    out = []
+    for name in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        path = os.path.join(base, name)
+        if name.endswith(".md") and os.path.isfile(path):
+            got = parse_rule(dream_io.read_exact(path))
+            if got:
+                out.append((got["id"], path, got))
+    return out
+
+
+def next_gid(taken=()):
+    """The next free rule ID. Retired files count, so that an ID is never used twice."""
+    top = 0
+    names = []
+    for base in (dream_io.rules_dir(), dream_io.retired_dir()):
+        names += os.listdir(base) if os.path.isdir(base) else []
+    for n in names:
+        m = GID.match(n)
+        if m:
+            top = max(top, int(m.group(1)))
+    for t in taken:
+        m = GID.match(t)
+        if m:
+            top = max(top, int(m.group(1)))
+    return "G-%03d" % (top + 1)
+
+
+# ---------------------------------------------------------------- auto-memory files
+
+def memory_description(rule, limit=150):
+    """One line of at most `limit` characters from a rule: its first sentence, or the first words."""
+    t = " ".join(str(rule).split())
+    first = re.split(r"(?<=[.!?])\s", t, maxsplit=1)[0]
+    if len(first) <= limit:
+        return first
+    return t[:limit - 3].rsplit(" ", 1)[0].rstrip(",;:") + "..."
+
+
+def render_memory(slug, description, rule, why, how):
+    return ("---\nname: %s\ndescription: %s\nmetadata:\n  type: feedback\n  origin: dream\n---\n\n"
+            "%s\n\n**Why:** %s\n**How to apply:** %s\n" % (slug, yaml_scalar(description), rule.strip(), why.strip(),
+                                                          how.strip()))
+
+
+def index_line(slug, description):
+    return "- [%s](%s.md) \u2014 %s" % (slug, slug, " ".join(description.split()))
+
+
+def append_index(text, line):
+    """Add one line at the end of MEMORY.md. The text before it keeps its bytes."""
+    if text and not text.endswith("\n"):
+        text += "\n"
+    return text + line + "\n"
+
+
+def memory_rules(memory_dir):
+    """The rule texts that a project already has: each line of MEMORY.md, and each file that the dream wrote."""
+    out = []
+    index = dream_io.read_exact(os.path.join(memory_dir, "MEMORY.md"))
+    out += [ln.strip().lstrip("-* ").strip() for ln in index.splitlines() if ln.strip() and not ln.startswith("#")]
+    for name in sorted(os.listdir(memory_dir)) if os.path.isdir(memory_dir) else []:
+        if name.endswith(".md") and name != "MEMORY.md":
+            text = dream_io.read_exact(os.path.join(memory_dir, name))
+            if re.search(r"^\s+origin:\s*dream\s*$", text, re.M):
+                m = FRONTMATTER.match(text)
+                out.append((m.group(2) if m else text).strip().split("\n\n")[0])
+    return out

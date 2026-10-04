@@ -29,8 +29,7 @@ write `checks` before that. The file is meant to be committed.
   "standing": { "commit": "ask", "afterLock": [], "notify": true },
   "docs": { "root": "docs", "ste": "lite" },
   "relay": true,
-  "fix": { "logs": null },
-  "dream": { "nightly": false, "maxItems": 3, "budgetUsd": 2, "stacks": [] }
+  "fix": { "logs": null }
 }
 ```
 
@@ -57,7 +56,11 @@ write `checks` before that. The file is meant to be committed.
 | `docs.ste` | `lite`: the length rules block and the style rules warn. `full`: the style rules block too, except noun clusters. `off`: no check. |
 | `relay` | Reset the context after each checkpoint. This needs ratchet's relay mod. |
 | `fix.logs` | Where the fix track reads the logs: `{ source, retrieve, errorPattern, config, resolvedAt, notes }`. See `fix.md`. |
-| `dream` | The learning loop: `nightly`, `maxItems`, `budgetUsd`, and `stacks` (the names of the stack libraries of this repo). See `dream.md`. |
+
+The dream is one for the whole machine, so its settings are not here. They are in
+`~/.claude/ratchet/dream.json` (see `dream.md`). One older key stays: `dream.stacks`
+names files in `~/.claude/ratchet/stacks/` that `RS learnings` adds to the digest. A
+global rule with `paths` now does the same job for every repo.
 
 ## Checks
 

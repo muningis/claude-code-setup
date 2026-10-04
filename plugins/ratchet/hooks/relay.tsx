@@ -5,7 +5,8 @@ import { register as registerGuard } from './guard'
 // ratchet's relay: at each checkpoint's end the skill writes a minimal baton
 // (`RS baton`) and ends its turn with a marker; this resets the context to that
 // baton and, under --auto, starts the next run. A skill can't clear its own
-// context; a mod can. It also keeps the status line while a run is live.
+// context; a mod can. It also keeps the status line while a run is live, and
+// says at session start when dream proposals wait for review.
 
 type $ = EngineInterface
 
@@ -27,6 +28,8 @@ export function parseMarker(answer: string): { path: string; slug: string; how: 
 const LIVE_FILE = '.claude/ratchet/live.json'
 const LIVE_MAX_AGE_MS = 6 * 60 * 60 * 1000 // a crashed run leaves `active: true` behind
 const STATUS_POLL_MS = 5000
+// Under the home folder, not the session's: the nightly dream is one for the whole machine.
+const DREAM_PENDING = '.claude/ratchet/dreams/pending.json'
 
 // Module state: a hot reload drops it, which at worst skips one reset.
 let pending: string | null = null // the baton the next compaction installs
@@ -96,6 +99,31 @@ function statusLine(text: string, now: number) {
   return [`ratchet${cp ? ` ${cp}` : ''}`, gate, `${minutes}m`].filter(Boolean).join(' · ')
 }
 
+/** The session-start line for dream proposals that wait for review, or undefined. */
+export function dreamNotice(text: string) {
+  let index: { bundles?: unknown }
+  try {
+    index = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  const bundles = Array.isArray(index?.bundles) ? (index.bundles as { items?: unknown }[]) : []
+  const items = bundles.reduce((n, b) => n + (typeof b?.items === 'number' && b.items > 0 ? b.items : 0), 0)
+  if (items === 0) return undefined
+  return `🦝 ${items} dream proposal${items === 1 ? '' : 's'} wait for you · /ratchet dream`
+}
+
+async function announceDreams($: $) {
+  try {
+    const home = await $.env.get('HOME')
+    if (!home) return
+    const notice = dreamNotice(await $.fs.read(`${home}/${DREAM_PENDING}`))
+    if (notice) $.ui.log(notice)
+  } catch {
+    // No index means no proposals.
+  }
+}
+
 async function refreshStatus($: $) {
   try {
     const now = await $.clock.now()
@@ -116,6 +144,7 @@ export const register: Register = (on, options) => {
     poll?.cancel()
     poll = $.clock.every(STATUS_POLL_MS, () => void refreshStatus($))
     await refreshStatus($)
+    await announceDreams($)
     return next(e)
   })
 

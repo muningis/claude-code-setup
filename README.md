@@ -26,6 +26,8 @@ home/                  # source for ~/.claude — deliberately not named .claude
                        # user config it's meant to be the source of
   settings.json        # model, plugins, statusline, notif channel, hooks, effort, auto-mode
   CLAUDE.md            # global workflow contract Opus follows
+  rules/               # user rules every session loads (~/.claude/rules, linked whole)
+    dream/             #   rules ratchet's nightly dream proposed and you approved
   statusline.sh        # custom 3-line status line (dir/branch · model/effort · ctx/cost/limits)
   hooks/
     notify.sh          # native macOS notifications (see below)

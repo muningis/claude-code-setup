@@ -15,7 +15,7 @@ checkpoint does not start before the current one locks.
 /ratchet verify              run the repo's checks on what changed
 /ratchet handover | resume   pass the work to the next session
 /ratchet why <question>      why the code is this way
-/ratchet dream               propose learnings from past runs
+/ratchet dream               review the rules that the nightly dream proposes
 ```
 
 `/ratchet` runs only when you call it, because one checkpoint costs 5 to 8 agent runs.
@@ -73,8 +73,11 @@ from round 4.
 - `learnings.md` holds numbered rules, each with a scope, a check, a source and
   counters. The spec and implement agents get each active rule. The reviewers get only
   the rules whose scope matches the changed files.
-- A dream reads past runs and proposes 3 changes or fewer, each with evidence. It runs
-  each night through launchd, or when you ask. You approve each item.
+- A dream reads your Claude Code sessions in every project, and the ratchet runs in
+  them. It proposes 3 rules or fewer, each with evidence. It runs each night through
+  launchd, or when you ask. You approve each item. An approved rule goes to
+  `~/.claude/rules/` (every session), to the auto-memory of one project, or to a repo's
+  `learnings.md`.
 - Once a week, a dream can propose one change to an agent prompt. An eval replay must
   show no regression, and you decide.
 

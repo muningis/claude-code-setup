@@ -25,7 +25,7 @@ Read `$ARGUMENTS`. Pick one row. When the request is not clear, ask one question
 | `verify` | `references/verify.md` |
 | `handover` or `resume` | `references/handover.md` |
 | `why …` | `references/why.md` |
-| `dream` | `references/dream.md` |
+| `dream` | `references/dream.md`. It works in any folder, also outside git. |
 
 All references are in `${CLAUDE_SKILL_DIR}/references/`. `contracts.md` defines each
 command and file. `config.md` defines the config. `docs.md` defines the change
@@ -70,7 +70,7 @@ when you resume.
 test -f .claude/ratchet/config.json && { echo '[ratchet] config:'; head -c 1500 .claude/ratchet/config.json; echo; } || echo '[ratchet] no config yet'
 find .claude/ratchet/plans -name '*.md' ! -name '*.reference.md' -exec grep -H '^| cp' {} + 2>/dev/null || echo '[ratchet] no plans yet'
 test -f .claude/ratchet/live.json && { echo '[ratchet] live:'; cat .claude/ratchet/live.json; echo; }
-find .claude/ratchet/dreams -name proposal.json -exec sh -c 'test -f "$(dirname "$1")/review.json" || echo "[ratchet] dream proposal: $1"' _ {} \; 2>/dev/null | head -3
+test -f ~/.claude/ratchet/dreams/pending.json && { echo '[ratchet] dream proposals:'; cat ~/.claude/ratchet/dreams/pending.json; echo; }
 find .claude/handovers -name 'ratchet-*.md' 2>/dev/null | sed 's/^/[ratchet] baton: /'
 true
 ```

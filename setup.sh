@@ -76,6 +76,9 @@ link() {
 
 link "$SRC/CLAUDE.md"       "$DEST/CLAUDE.md"
 link "$SRC/statusline.sh"   "$DEST/statusline.sh"
+# rules/ is linked whole: Claude Code loads every .md in it in every session, and ratchet's
+# nightly dream writes the rules you approve into rules/dream/, so each one lands here as a diff.
+link "$SRC/rules"           "$DEST/rules"
 # notify.sh is linked individually, not the whole hooks/ dir: the hook appends to
 # ~/.claude/hooks/notify.log at runtime, which must not land inside the repo.
 link "$SRC/hooks/notify.sh" "$DEST/hooks/notify.sh"
@@ -103,4 +106,4 @@ if [[ "$SYNC_ONLY" == false ]]; then
   echo "    ast-grep --version && shellcheck --version && yq --version"
   echo "    claude mcp list        # basic-memory + context7 should be connected/green"
 fi
-echo "    ls -l ~/.claude/CLAUDE.md ~/.claude/statusline.sh ~/.claude/hooks/notify.sh   # all symlinks into this repo"
+echo "    ls -ld ~/.claude/CLAUDE.md ~/.claude/rules ~/.claude/statusline.sh ~/.claude/hooks/notify.sh   # all symlinks into this repo"

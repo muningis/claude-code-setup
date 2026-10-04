@@ -339,7 +339,7 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 | `RS learnings --scope <path>...` or `RS learnings --all` | Prints the active learnings entries whose scope matches one of the paths (or all of them), the text outside the entries, and the matching stack rules | markdown |
 | `RS stelint <path>...` | Checks the STE-lite rules in `docs.md` | JSON |
 | `RS doclint <path>... [--approval] [--approve <file>]` | Checks the document rules in `docs.md`. `--approve` records the approved body. | JSON |
-| `RS dream <step> ...` | `harvest`, `curate <date>`, `apply <date> ...`, `install`, `uninstall`. See `dream.md`. | JSON |
+| `RS dream <step> ...` | `harvest [--dry]`, `prompt <date>`, `curate <date>`, `apply <date> ...`, `state`, `install`, `uninstall`. They work in any folder. See `dream.md`. | JSON |
 
 ## Live file
 
