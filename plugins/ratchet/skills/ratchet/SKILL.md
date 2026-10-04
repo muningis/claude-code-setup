@@ -32,7 +32,8 @@ command and file. `config.md` defines the config. `docs.md` defines the change
 documents.
 
 **Before you route:** when the state block below shows dream proposals, show them first,
-as `references/dream.md` says in "Review". Then continue with the request.
+as `references/dream.md` says in "Review". Then continue with the request. Skip this when
+`$ARGUMENTS` has `--relay`: an automatic run must not wait for a reply.
 
 ## Invariants
 

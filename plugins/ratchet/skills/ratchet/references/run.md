@@ -45,12 +45,13 @@ only when you must decide.
 | `status` | Do |
 | --- | --- |
 | `ready-for-B4` | The result is a claim. Run `RS state <slug> <cp>` yourself: `stage` must be `B4`, and `refs.gated` must be set. Then run `RS check .claude/ratchet/evidence/<slug>/*` and `RS changed refs/ratchet/<slug>/<cp>/gated`. Both must be clean. Then go to step 5. |
-| `needs-decision` | Show `question` in 5 lines or fewer. Send a push notification. End your turn. Then run `RS decide <slug> <cp> "<answer>"` and start the engine again. |
+| `needs-decision` | Show `question` in 5 lines or fewer. Send a push notification. End your turn. Then run `RS decide <slug> <cp> "<answer>" --reopen b1` and start the engine again. When the human drops the row instead, run `RS row <slug> <cp> superseded` or `blocked`. |
 | `blocked` | Run `RS row <slug> <cp> blocked --note "blocked: <reason>"`. Show the reason and the evidence path. Ask what to do. |
 | `harness-error` | Show the reason. Fix the config or the tool with the human. Do not retry without a change. When the reason is "state files changed", show `diff -u` of each file against its copy in `PIN/locked/`. When the human keeps the change, lock `PIN` again. Else run `RS restore` on `PIN`. |
 
-When `RS changed` shows edits after the gates, start the engine again. It runs B1 to B3
-on the new code.
+When `RS changed` shows edits after the gates, run
+`RS decide <slug> <cp> "edits after the gates" --reopen b1`. Then start the engine again.
+It runs B1 to B3 on the new code.
 
 ## 5. Human gate (B4)
 

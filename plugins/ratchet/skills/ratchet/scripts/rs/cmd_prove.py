@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import sys
 
 import common
@@ -88,6 +89,16 @@ def restore_tree(root, tree, changed):
                     f.write(blob)
 
 
+def backup_changed(root, dest, changed):
+    """Copy each changed file, as it is now, to dest. A person may have edited it while the proof ran."""
+    for status, path in changed:
+        src = os.path.join(root, path)
+        if status != "D" and os.path.isfile(src):
+            copy = os.path.join(dest, *path.split("/"))
+            os.makedirs(os.path.dirname(copy), exist_ok=True)
+            shutil.copyfile(src, copy)
+
+
 def run_proof(root, cfg, slug, cp, fid, cmd, pattern):
     """Run one proof from the repo root. Returns a dict with result, exit, ms, out and changed."""
     out_path = os.path.join(common.ev_dir(root, slug, cp), "proofs", "%s.out" % safe_name(fid))
@@ -98,6 +109,8 @@ def run_proof(root, cfg, slug, cp, fid, cmd, pattern):
     res = {"exit": rc, "ms": ms, "out": out_path, "changed": [p for _, p in changed],
            "timeout": rc == 124}
     if changed:
+        res["backup"] = os.path.join(os.path.dirname(out_path), "%s.backup" % safe_name(fid))
+        backup_changed(root, res["backup"], changed)
         restore_tree(root, before, changed)
         res["result"] = "invalid"
         res["restored"] = not common.diff_status(root, before)
@@ -142,6 +155,7 @@ def main(argv):
         if res["result"] == "invalid":
             extra["changed"] = res["changed"]
             extra["restored"] = res["restored"]
+            extra["backup"] = common.rel(root, res["backup"])
         verdict = "pass" if res["result"] == "reproduced" else "fail"
         return common.emit("prove", verdict, "%s: %s" % (fid, res["result"]), evidence=res["out"],
                            nonce=nonce, root=root, extra=extra)

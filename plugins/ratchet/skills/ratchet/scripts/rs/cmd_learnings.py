@@ -1,4 +1,4 @@
-"""learnings --scope <path>...: the learnings entries and stack rules that apply to these paths.
+"""learnings --scope <path>... | --all: the learnings entries and stack rules that apply to these paths.
 
 Prints markdown for an agent prompt, not JSON. A version 1 file (plain bullets, no entry IDs)
 has no scopes, so all of it applies."""
@@ -46,7 +46,8 @@ def entries(text):
 
 
 def applies(entry, paths):
-    if not entry["scope"]:
+    """paths None means every path."""
+    if paths is None or not entry["scope"]:
         return True
     return any(common.glob_match(g, p) for g in entry["scope"] for p in paths)
 
@@ -83,14 +84,25 @@ def digest(title, text, paths):
     return "## %s\n\n%s\n" % (title, "\n\n".join(parts))
 
 
+def render(root, cfg, paths=None):
+    """The learnings and the stack rules that apply to these paths, as markdown. paths None means all."""
+    parts = [digest("Learnings", common.read_text(os.path.join(common.r_dir(root), "learnings.md")), paths)]
+    stacks_dir = os.path.join(os.path.expanduser("~"), ".claude", "ratchet", "stacks")
+    for name in (cfg.get("dream") or {}).get("stacks") or []:
+        if re.fullmatch(r"[A-Za-z0-9._-]+", str(name)):
+            parts.append(digest("Stack rules: %s" % name,
+                                common.read_text(os.path.join(stacks_dir, "%s.md" % name)), paths))
+    return "\n".join(p for p in parts if p)
+
+
 def main(argv):
     try:
-        pos, opts = common.parse_args(argv, bool_flags=("--scope",))
+        pos, opts = common.parse_args(argv, bool_flags=("--scope", "--all"))
     except RsError as e:
         sys.stderr.write("ratchet: %s\n" % e)
         return 2
-    if not opts.get("--scope") or not pos:
-        sys.stderr.write("usage: learnings --scope <path>...\n")
+    if not opts.get("--all") and (not opts.get("--scope") or not pos):
+        sys.stderr.write("usage: learnings --scope <path>... | learnings --all\n")
         return 2
     try:
         root = common.repo_root()
@@ -98,13 +110,7 @@ def main(argv):
     except RsError as e:
         sys.stderr.write("ratchet: %s\n" % e)
         return 2
-    parts = [digest("Learnings", common.read_text(os.path.join(common.r_dir(root), "learnings.md")), pos)]
-    stacks_dir = os.path.join(os.path.expanduser("~"), ".claude", "ratchet", "stacks")
-    for name in (cfg.get("dream") or {}).get("stacks") or []:
-        if re.fullmatch(r"[A-Za-z0-9._-]+", str(name)):
-            parts.append(digest("Stack rules: %s" % name,
-                                common.read_text(os.path.join(stacks_dir, "%s.md" % name)), pos))
-    text = "\n".join(p for p in parts if p)
+    text = render(root, cfg, None if opts.get("--all") else pos)
     sys.stdout.write(text if text else "No learnings apply to these paths.\n")
     return 0
 

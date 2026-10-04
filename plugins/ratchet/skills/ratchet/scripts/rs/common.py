@@ -26,7 +26,7 @@ STAGE_BY_STATUS = {
 }
 ENVELOPE = ("ok", "cmd", "nonce", "verdict", "summary", "evidence", "sha256")
 MAX_STDOUT = 1000  # contracts.md: stdout is one object of 1 KB or less
-EXIT_CODE = {"pass": 0, "fail": 1, "error": 2}
+EXIT_CODE = {"pass": 0, "fail": 1, "error": 2, "pending": 0}
 REQ_ID_RE = re.compile(r"\b(?:FR|UB)-\d{3}\b")
 NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
@@ -120,6 +120,11 @@ def ev_dir(root, slug, cp):
 
 def state_path(root, slug, cp):
     return os.path.join(ev_dir(root, slug, cp), "state.json")
+
+
+def jobs_dir(root, slug, cp):
+    """Where a detached gate writes its result, its pid and its errors."""
+    return os.path.join(ev_dir(root, slug, cp), ".jobs")
 
 
 def live_path(root):
@@ -311,10 +316,15 @@ def emit(cmd, verdict, summary, evidence=None, nonce=None, root=None, extra=None
         obj["evidence"] = evidence_list
     if harness_error:
         obj["harnessError"] = harness_error
+    return print_result(obj)
+
+
+def print_result(obj):
+    """Print obj as the one JSON line of a command, cut to 1 KB. Returns the exit code of its verdict."""
     _fit(obj)
     sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
     sys.stdout.flush()
-    return EXIT_CODE.get(verdict, 2)
+    return EXIT_CODE.get(obj.get("verdict"), 2)
 
 
 def run_guarded(cmd, nonce, fn):
@@ -808,6 +818,18 @@ def pin_status(root, slug):
 
 
 # ---------------------------------------------------------------- running commands
+
+def pid_alive(pid):
+    if not pid or pid < 1:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True  # the process exists; it belongs to another user
+    return True
+
 
 def kill_group(proc):
     """Stop the command and every child it started. TERM first, then KILL."""

@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import os
 
+import cmd_learnings
 import cmd_red_check
+import cmd_row
 import cmd_trace
 import common
 from common import RsError
-from gatekit import Result, render_results, run_checks
+from gatekit import Result, render_results, row_notes, run_checks
 
 TEXT_CAP = 1000000
 
@@ -29,6 +31,18 @@ def case_names(ctx, tests, texts):
     return names
 
 
+def architecture_path(ctx):
+    """The first architecture file that exists, as an absolute path, or None."""
+    docs_root = ctx.cfg["docs"].get("root") or "docs"
+    cands = [docs_root + "/architecture.md", ".claude/ratchet/architecture.md"]
+    if isinstance(ctx.cfg.get("architecture"), str) and ctx.cfg["architecture"]:
+        cands.insert(0, ctx.cfg["architecture"])
+    for c in cands:
+        if os.path.isfile(os.path.join(ctx.root, c)):
+            return os.path.join(ctx.root, c)
+    return None
+
+
 def state_files(ctx):
     """The files that set how the gates judge. They are pinned in the plan's _state dir."""
     docs_root = ctx.cfg["docs"].get("root") or "docs"
@@ -43,17 +57,54 @@ def state_files(ctx):
     return out
 
 
+def lock_files(ctx, d, paths, what):
+    """Pin these files in the evidence dir d."""
+    listing = ctx.evp(".rs-pins.txt")
+    common.write_text(listing, "".join(p + "\n" for p in paths))
+    rc, out, err = common.rs_run(ctx.root, "lock", d, "--from", listing)
+    os.remove(listing)
+    if rc != 0:
+        raise RsError("%s failed: %s" % (what, (err.strip() or out.strip())[:200]))
+
+
+def write_context(ctx):
+    """EV/context.md: what each agent of the row reads first. File paths are absolute."""
+    cfg, row, root = ctx.cfg, ctx.row, ctx.root
+    docs = []
+    for d in cmd_trace.change_dirs(root, cfg, ctx.slug):
+        docs += [os.path.join(d, f) for f in sorted(os.listdir(d)) if f.endswith(".md")]
+    tol = cfg["visual"]["tolerance"] if ctx.has_visual() else None
+    lines = ["# Context: %s/%s" % (ctx.slug, ctx.cp), "", "## Row",
+             "- plan: %s" % common.plan_path(root, ctx.slug),
+             "- id: %s" % row["id"],
+             "- title: %s" % row["checkpoint"],
+             "- kind: %s" % row["kind"],
+             "- target: %s" % row["target"],
+             "- reqs: %s" % (", ".join(row["reqs"]) or "-"),
+             "- est: %s" % (row["est"] if row["est"] is not None else "-"),
+             "", "## Notes for this row"]
+    lines += row_notes(root, ctx.slug, ctx.cp) or ["- none"]
+    lines += ["", "## Documents"]
+    lines += ["- " + d for d in docs] or ["- no change documents"]
+    lines += ["- architecture: %s" % (architecture_path(ctx) or "none"),
+              "", "## Tests",
+              "- on given files: `%s`" % (cfg["behavior"].get("one") or ""),
+              "- all: `%s`" % (cfg["behavior"].get("all") or ""),
+              "- budget: %s per requirement, %s per checkpoint"
+              % (cfg["tests"].get("perRequirement"), cfg["tests"].get("perCheckpoint")),
+              "", "## Visual",
+              ("- tolerance: px %s, color %s" % (tol["px"], tol["color"])) if tol else "- no visual gate"]
+    common.write_text(ctx.evp("context.md"), "\n".join(lines) + "\n")
+
+
 def run_prep(ctx):
-    """Gate b0-prep: the base snapshot, the baseline run and the state pins, before the spec agent.
+    """Gate b0-prep: the baseline run, the base snapshot, the state pins and the agents' files, before the spec agent.
 
     Gate b0 finds the spec set as the files changed since base, so base must exist first."""
     root = ctx.root
     os.makedirs(ctx.ev, exist_ok=True)
     base = common.resolve_base(root, ctx.slug, ctx.row)
     created = not base
-    # A resumed checkpoint keeps its base. A new snapshot would hide the work done since.
-    if created:
-        base = common.snap(root, "%s/%s/base" % (ctx.slug, ctx.cp))
 
     baseline_json = ctx.evp("0-baseline.json")
     if not os.path.isfile(baseline_json):
@@ -68,14 +119,18 @@ def run_prep(ctx):
     baseline = common.read_json(baseline_json, default={}) or {}
     failing = sorted(k for k, ok in baseline.items() if ok is False)
 
+    # The baseline runs first, so that the files the tests leave behind belong to the base. Else b0
+    # would take them for spec files. A resumed checkpoint keeps its base: a new one hides the work done since.
+    if created:
+        base = common.snap(root, "%s/%s/base" % (ctx.slug, ctx.cp))
+    cmd_row.update_plan(root, ctx.slug, ctx.cp, {"base": cmd_row.short_sha(base)})
+
     pinned = state_files(ctx)
     if pinned:
-        listing = ctx.evp(".rs-state.txt")
-        common.write_text(listing, "".join(p + "\n" for p in pinned))
-        rc, out, err = common.rs_run(root, "lock", ".claude/ratchet/evidence/%s/_state" % ctx.slug, "--from", listing)
-        os.remove(listing)
-        if rc != 0:
-            raise RsError("pinning the state files failed: %s" % (err.strip() or out.strip())[:200])
+        lock_files(ctx, ctx.state_dir(), pinned, "pinning the state files")
+
+    write_context(ctx)
+    common.write_text(ctx.evp("learnings.md"), cmd_learnings.render(root, ctx.cfg) or "No learnings yet.\n")
 
     common.write_json(common.live_path(root), {
         "active": True, "slug": ctx.slug, "cp": ctx.cp, "gate": "B0", "round": ctx.round,
@@ -85,6 +140,34 @@ def run_prep(ctx):
                                           "clean" if not failing else "already failing: " + ", ".join(failing))
     return Result("pass", summary, ctx.evp("0-baseline.txt"),
                   {"base": base, "baselineFailing": failing, "statePins": pinned})
+
+
+def relock_amendments(ctx, tests):
+    """Lock again each earlier test that this spec changed. Else the older pin undoes the change in b1."""
+    root = ctx.root
+    older = [d for d in common.pin_dirs(root, ctx.slug) if d not in (ctx.ev_rel(), ctx.state_dir())]
+    hit = {}
+    for kind, path, d in common.check_pins(root, older):
+        if kind == "changed" and path in tests:
+            hit.setdefault(d, []).append(path)
+    if not hit:
+        return []
+    spec = common.read_json(ctx.evp("0-spec.json"), default=None)
+    reasons = {}
+    for a in (spec.get("amendments") if isinstance(spec, dict) else None) or []:
+        if isinstance(a, dict) and a.get("path") and a.get("reason"):
+            reasons[os.path.normpath(common.rel(root, str(a["path"])))] = str(a["reason"])
+    amended = []
+    notes = []
+    for d, paths in sorted(hit.items()):
+        lock_files(ctx, d, paths, "locking the amended tests")
+        for p in paths:
+            if p not in amended:
+                amended.append(p)
+                notes.append("- %s: %s\n" % (p, reasons.get(p) or "changed by the %s spec" % ctx.cp))
+    path = ctx.evp("0-amendments.md")
+    common.append_text(path, ("" if os.path.isfile(path) else "# Amendments\n\n") + "".join(notes))
+    return amended
 
 
 def run(ctx):
@@ -149,25 +232,26 @@ def run(ctx):
     if trace["missing"]:
         problems.append("trace missing %s" % ", ".join(trace["missing"]))
 
-    extra = {"cases": cases, "red": red, "trace": trace, "budget": budget, "tests": tests, "stubs": stubs}
+    extra = {"cases": cases, "red": red, "trace": trace, "budget": budget, "tests": tests, "stubs": stubs,
+             "amended": []}
     if problems:
         res = Result("fail", "spec rejected: %s" % "; ".join(problems), evidence, extra)
         res.round_key = "b0"
         return res
 
-    listing = ctx.evp(".rs-pins.txt")
-    common.write_text(listing, "".join(p + "\n" for p in tests))
-    rc, out, err = common.rs_run(ctx.root, "lock", ctx.ev_rel(), "--from", listing)
-    os.remove(listing)
-    if rc != 0:
-        raise RsError("pinning failed: %s" % (err.strip() or out.strip())[:200])
+    # Only a spec that passes may change an older pin: a rejected one would bless unvetted edits.
+    extra["amended"] = relock_amendments(ctx, tests)
+    lock_files(ctx, ctx.ev_rel(), tests, "pinning")
     common.snap(ctx.root, "%s/%s/red" % (ctx.slug, ctx.cp))
 
     shown = ", ".join("%d %s" % (red[k], k) for k in ("assert", "stub", "pass") if red[k])
     summary = "spec ok: %s; %d cases; %d files pinned" % (shown, cases, len(tests))
+    if extra["amended"]:
+        summary += "; %d earlier tests amended" % len(extra["amended"])
     if budget["over"]:
         summary += "; over budget (%d > %d)" % (cases, limit)
     res = Result("pass", summary, evidence, extra)
     res.round_key = "b0"
     res.advance = "B1"
+    res.row_status = "red"
     return res

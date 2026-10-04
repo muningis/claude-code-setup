@@ -66,8 +66,12 @@ dream_repo() {
 
   # The prompt comes first because --allowedTools takes a list and would swallow a later argument.
   # RS exec stops a hung run, which would otherwise block this repo and every later night.
+  # The harvest holds text from past sessions, so the reflect run may write only into the
+  # dream folders (an Edit rule also covers Write). If the rule stops the write, curate
+  # reads the candidates from reflect.log instead.
   bash "$RS" exec --timeout "$TIMEOUT" -- "$CLAUDE" -p "$(cat "$prompt_file")" \
-    --model "${model:-sonnet}" --max-budget-usd "$budget" --allowedTools "Read Write" \
+    --model "${model:-sonnet}" --max-budget-usd "$budget" \
+    --allowedTools "Read" "Edit(.claude/ratchet/dreams/**)" \
     >"$bdir/reflect.log" 2>&1
   claude_status=$?
 

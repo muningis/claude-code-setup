@@ -40,10 +40,12 @@ def main(argv):
         if reopen:
             state["stage"] = REOPEN[reopen]
             if reopen == "b1":
-                # The engine gives the next implementer this brief. The gate that fails next keeps
-                # this text at the top when it writes its own part.
+                # The engine gives the next implementer this brief. The decision goes on top of what the
+                # last failed gate wrote there; the gate that fails next keeps the whole text at its top.
                 brief = os.path.join(ev, "1-brief-r%d.md" % (state["rounds"].get("b1", 0) + 1))
-                common.write_text(brief, "## Decision from the human\n%s\n" % text)
+                old = common.read_text(brief).strip("\n")
+                top = "## Decision from the human\n%s\n" % text
+                common.write_text(brief, top + ("\n" + old + "\n" if old else ""))
                 extra["brief"] = common.rel(root, brief)
             extra["stage"] = state["stage"]
         common.write_state(root, state)

@@ -467,7 +467,7 @@ t('the nightly script harvests, runs claude with a budget and a short tool list,
   expect(first.out).toContain(`${repo}: proposed 1 item(s) in dream`)
   // The prompt comes first because --allowedTools takes a list; the model comes from reflect.md.
   expect(readFileSync(claudeLog, 'utf8').trim().split('\n')).toEqual(
-    ['--model', 'sonnet', '--max-budget-usd', '2', '--allowedTools', 'Read Write'])
+    ['--model', 'sonnet', '--max-budget-usd', '2', '--allowedTools', 'Read', 'Edit(.claude/ratchet/dreams/**)'])
   const prompt = readFileSync(`${claudeLog}.prompt`, 'utf8')
   expect(prompt).toContain('You read what happened in past ratchet runs')
   expect(prompt).not.toContain('model: sonnet')

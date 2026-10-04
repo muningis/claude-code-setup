@@ -162,7 +162,16 @@ function verifyRelay(res, nonce) {
   return { ok: true, reason: "" };
 }
 function gateVerdict(res) {
-  return res && (res.verdict === "pass" || res.verdict === "fail") ? res.verdict : "error";
+  const v = res && res.verdict;
+  return v === "pass" || v === "fail" || v === "pending" ? v : "error";
+}
+const WAIT_SECONDS = 480;
+const MAX_WAITS = 15;
+function waitCommand(rs, slug, cp, job, nonce) {
+  return `${rs} wait ${slug} ${cp} ${job} --nonce ${nonce} --timeout ${WAIT_SECONDS}`;
+}
+function isSafeJob(job) {
+  return typeof job === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(job) && !job.includes("..");
 }
 function classifyImplement(impl) {
   const status = impl && typeof impl === "object" ? impl.status : undefined;
@@ -221,11 +230,14 @@ const RELAY_SCHEMA = {
     ok: { type: "boolean" },
     cmd: { type: "string" },
     nonce: { type: ["string", "null"] },
-    verdict: { type: "string", enum: ["pass", "fail", "error"] },
-    summary: { type: "string" }
+    verdict: { type: "string", enum: ["pass", "fail", "error", "pending"] },
+    summary: { type: "string" },
+    job: { type: "string" }
   },
   required: ["ok"]
 };
+const FINDING_ID = { type: "string", pattern: "^[A-Za-z0-9._-]+-[AB][0-9]+-[0-9]+$" };
+const VISUAL_ID = { type: "string", pattern: "^[A-Za-z0-9._-]+-V[0-9]+-[0-9]+$" };
 const SPEC_SCHEMA = {
   type: "object",
   properties: {
@@ -271,11 +283,13 @@ const VISUAL_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: VISUAL_ID,
           element: { type: "string" },
           kind: { type: "string", enum: ["position", "size", "color", "missing", "extra", "text", "other"] },
           delta: { type: "object", properties: { px: { type: "number" }, color: { type: "number" } } },
           engine: { type: "boolean" },
+          deferred: { type: "boolean" },
+          waived: { type: "boolean" },
           severity: { type: "string", enum: LEVELS },
           fixable: { type: "boolean" },
           location: { type: "string" }
@@ -297,7 +311,7 @@ const REVIEW_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: FINDING_ID,
           severity: { type: "string", enum: LEVELS },
           file: { type: "string" },
           line: { type: "number" },
@@ -336,14 +350,21 @@ function agentOpts(agentType, label, phaseTitle, schema, model) {
 function relayPrompt(cfg, command) {
   return [
     `Run this one command from ${cfg.repo} and return the JSON object it prints, unchanged.`,
-    "Exit codes 1 and 2 are normal. Run nothing else.",
+    "Give the Bash call a timeout of 600000 ms. Exit codes 1 and 2 are normal. Run nothing else.",
     "",
     command
   ].join(`
 `);
 }
-function specPrompt(cfg, round, out, retry) {
-  const lines = [`Write the spec for checkpoint ${cfg.cp} of plan ${cfg.slug}.`, `Repo: ${cfg.repo}`, `Round: ${round}`];
+function sharedLines(ev) {
+  return [
+    `Read first: ${ev}/context.md`,
+    `Learnings that apply: ${ev}/learnings.md`,
+    `Decisions of the human, if the file exists: ${ev}/decisions.md`
+  ];
+}
+function specPrompt(cfg, ev, round, out, retry) {
+  const lines = [`Write the spec for checkpoint ${cfg.cp} of plan ${cfg.slug}.`, `Repo: ${cfg.repo}`, `Round: ${round}`, ...sharedLines(ev)];
   if (retry) {
     lines.push(retry.evidence ? `The spec gate failed. Read ${retry.evidence} and fix the spec.` : "The spec gate failed. Fix the spec.");
   }
@@ -351,12 +372,14 @@ function specPrompt(cfg, round, out, retry) {
   return lines.join(`
 `);
 }
-function implementPrompt(cfg, round, spec, out, fix) {
+function implementPrompt(cfg, ev, round, spec, out, fix) {
   const lines = [
     `Build checkpoint ${cfg.cp} of plan ${cfg.slug}.`,
     `Repo: ${cfg.repo}`,
     `Round: ${round}`,
-    `Spec: ${spec}`
+    `Spec: ${spec}`,
+    ...sharedLines(ev),
+    `Earlier attempts, if the file exists: ${ev}/1-attempts.md`
   ];
   if (fix) {
     if (fix.path)
@@ -373,8 +396,13 @@ function imageLines(repo, images) {
     return [];
   return images.filter((im) => im && typeof im === "object").map((im) => `- viewport ${im.viewport}: impl ${absPath(repo, String(im.impl))}, ref ${im.ref ? absPath(repo, String(im.ref)) : "none"}`);
 }
-function visualPrompt(cfg, round, images, capture, out) {
-  const lines = [`Judge the capture for checkpoint ${cfg.cp} of plan ${cfg.slug}.`, `Repo: ${cfg.repo}`, `Round: ${round}`];
+function visualPrompt(cfg, ev, round, images, capture, out) {
+  const lines = [
+    `Judge the capture for checkpoint ${cfg.cp} of plan ${cfg.slug}.`,
+    `Repo: ${cfg.repo}`,
+    `Round: ${round}`,
+    ...sharedLines(ev)
+  ];
   if (images.length > 0)
     lines.push("Images:", ...images);
   if (capture)
@@ -383,12 +411,16 @@ function visualPrompt(cfg, round, images, capture, out) {
   return lines.join(`
 `);
 }
-function reviewPrompt(cfg, role, round, input, out) {
+function reviewPrompt(cfg, ev, role, round, input, out) {
   const lines = [
     `Review checkpoint ${cfg.cp} of plan ${cfg.slug} as the ${role} reviewer.`,
     `Repo: ${cfg.repo}`,
-    `Round: ${round}`
+    `Round: ${round}`,
+    `Use finding IDs of the form ${cfg.cp}-${role === "arch" ? "A" : "B"}${round}-<n>.`,
+    ...sharedLines(ev)
   ];
+  if (role === "break" && input.report)
+    lines.push(`Implementer report, to read last: ${input.report}`);
   if (input.patch)
     lines.push(`Patch: ${input.patch}`);
   if (input.delta)
@@ -409,6 +441,7 @@ async function run(cfg) {
   const abs = (path) => absPath(cfg.repo, path);
   const evRel = (file) => `${evidenceDir(cfg.slug, cfg.cp)}/${file}`;
   const evAbs = (file) => abs(evRel(file));
+  const evDir = abs(evidenceDir(cfg.slug, cfg.cp));
   const pathOrNull = (value) => typeof value === "string" && value !== "" ? abs(value) : null;
   let epoch = cfg.epoch;
   let rounds = { b0: 0, b1: 0, b2: 0, b3: 0 };
@@ -458,8 +491,17 @@ async function run(cfg) {
   const gate = async (name, round, phaseTitle, opts = {}) => {
     nonceCount += 1;
     const nonce = makeNonce(cfg.nonce, nonceCount);
-    const command = gateCommand(cfg.rs, name, cfg.slug, cfg.cp, nonce, round, opts.extra || []);
-    const res = await relay(`gate ${name} r${round}`, command, nonce, phaseTitle);
+    const command = gateCommand(cfg.rs, name, cfg.slug, cfg.cp, nonce, round, [...opts.extra || [], "--detach"]);
+    let res = await relay(`gate ${name} r${round}`, command, nonce, phaseTitle);
+    for (let waits = 0;gateVerdict(res) === "pending"; waits++) {
+      if (waits >= MAX_WAITS)
+        throw stop("harness-error", `The ${name} gate still runs after ${waits} waits.`);
+      if (!isSafeJob(res.job))
+        throw stop("harness-error", `The ${name} gate returned a bad job ID.`);
+      nonceCount += 1;
+      const waitNonce = makeNonce(cfg.nonce, nonceCount);
+      res = await relay(`wait ${name} r${round}`, waitCommand(cfg.rs, cfg.slug, cfg.cp, res.job, waitNonce), waitNonce, phaseTitle);
+    }
     const verdict = gateVerdict(res);
     log(`${name} round ${round}: ${verdict}. ${clip(res.summary, 120)}`);
     note(name, res);
@@ -492,7 +534,7 @@ async function run(cfg) {
     let retry = null;
     for (let n = 1;n <= SPEC_ROUNDS; n++) {
       const r = base.b0 + n;
-      const spec = await agent(specPrompt(cfg, r, evAbs("0-spec.json"), retry), agentOpts("ratchet:spec", `spec r${r}`, P.b0, SPEC_SCHEMA, cfg.models.spec));
+      const spec = await agent(specPrompt(cfg, evDir, r, evAbs("0-spec.json"), retry), agentOpts("ratchet:spec", `spec r${r}`, P.b0, SPEC_SCHEMA, cfg.models.spec));
       if (!spec)
         throw stop("harness-error", "The spec agent returned nothing.");
       const g = await gate("b0", r, P.b0);
@@ -500,7 +542,8 @@ async function run(cfg) {
       if (g.pass)
         return;
       if (capExhausted(n, SPEC_ROUNDS)) {
-        throw stop("blocked", `The spec gate failed after ${n} rounds. ${sentence(g.res.summary)}`);
+        const why = `The spec gate failed after ${n} rounds. ${sentence(g.res.summary)}`;
+        throw stop("blocked", why, why);
       }
       retry = { evidence: pathOrNull(g.res.evidence) };
     }
@@ -511,8 +554,8 @@ async function run(cfg) {
     for (let n = 1;n <= cfg.caps.b1; n++) {
       implRound += 1;
       const r = implRound;
-      const resumed = n === 1 && r > 1 ? { label: "Brief, if it exists", path: evAbs(`1-brief-r${r}.md`), summary: "" } : null;
-      const impl = await agent(implementPrompt(cfg, r, evAbs("0-spec.json"), evAbs(`1-impl-r${r}.json`), fix || resumed), agentOpts("ratchet:implement", `implement r${r}`, P.b1, IMPLEMENT_SCHEMA, implementModel(r, cfg.models)));
+      const resumed = n === 1 ? { label: "Brief, if it exists", path: evAbs(`1-brief-r${r}.md`), summary: "" } : null;
+      const impl = await agent(implementPrompt(cfg, evDir, r, evAbs("0-spec.json"), evAbs(`1-impl-r${r}.json`), fix || resumed), agentOpts("ratchet:implement", `implement r${r}`, P.b1, IMPLEMENT_SCHEMA, implementModel(r, cfg.models)));
       if (!impl)
         throw stop("harness-error", "The implement agent returned nothing.");
       note("implement", { evidence: evRel(`1-impl-r${r}.json`) });
@@ -553,7 +596,7 @@ async function run(cfg) {
         const capture = await gate("b2-capture", r, P.b2);
         if (capture.pass)
           return;
-        const visual = await agent(visualPrompt(cfg, r, imageLines(cfg.repo, capture.res.images), pathOrNull(capture.res.evidence), evAbs(`2-visual-r${r}.json`)), agentOpts("ratchet:visual", `visual r${r}`, P.b2, VISUAL_SCHEMA, cfg.models.visual));
+        const visual = await agent(visualPrompt(cfg, evDir, r, imageLines(cfg.repo, capture.res.images), pathOrNull(capture.res.evidence), evAbs(`2-visual-r${r}.json`)), agentOpts("ratchet:visual", `visual r${r}`, P.b2, VISUAL_SCHEMA, cfg.models.visual));
         if (!visual)
           throw stop("harness-error", "The visual agent returned nothing.");
         g = await gate("b2", r, P.b2, { tolerate: isInvalidCapture });
@@ -591,9 +634,10 @@ async function run(cfg) {
         delta: r >= 2 ? pathOrNull(prep.res.delta) : null,
         tripwire: pathOrNull(prep.res.tripwire),
         checks: [prep.res.checkOutputs].flat().filter((p) => typeof p === "string" && p !== "").map(abs),
-        concerns: clip(concerns.join("; "), 600)
+        concerns: clip(concerns.join("; "), 600),
+        report: implRound > 0 ? evAbs(`1-impl-r${implRound}.json`) : null
       };
-      const outs = await parallel(roles.map((role) => () => agent(reviewPrompt(cfg, role, r, { ...common, previous: r >= 2 ? evAbs(`3-${role}-r${lastReview[role] ?? r - 1}.json`) : null }, evAbs(`3-${role}-r${r}.json`)), agentOpts(role === "arch" ? "ratchet:review-arch" : "ratchet:review-break", `${role} review r${r}`, P.b3, REVIEW_SCHEMA, role === "arch" ? cfg.models.reviewArch : cfg.models.reviewBreak))));
+      const outs = await parallel(roles.map((role) => () => agent(reviewPrompt(cfg, evDir, role, r, { ...common, previous: r >= 2 ? evAbs(`3-${role}-r${lastReview[role] ?? r - 1}.json`) : null }, evAbs(`3-${role}-r${r}.json`)), agentOpts(role === "arch" ? "ratchet:review-arch" : "ratchet:review-break", `${role} review r${r}`, P.b3, REVIEW_SCHEMA, role === "arch" ? cfg.models.reviewArch : cfg.models.reviewBreak))));
       roles.forEach((role, i) => {
         if (!outs[i])
           throw stop("harness-error", `The ${role} reviewer returned nothing.`);

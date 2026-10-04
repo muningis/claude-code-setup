@@ -5,6 +5,19 @@ import common
 from common import RsError
 from gatekit import Result, applicable_checks, render_results, run_checks, size_info
 
+PINNED = "pinned"
+
+
+def pinned_check(ctx):
+    """behavior.one on the tests that this checkpoint pinned, or None when it pinned none."""
+    files = [p for _, p in common.read_lock(ctx.root, ctx.ev_rel())]
+    if not files:
+        return None
+    one = (ctx.cfg["behavior"].get("one") or "").strip()
+    if not one:
+        raise RsError("config: behavior.one is empty")
+    return {"id": PINNED, "kind": "command", "run": common.fill_files(one, files), "when": [], "gate": ["b1"]}
+
 
 def restore_pins(ctx, bad):
     for d in sorted(set(d for _, _, d in bad)):
@@ -38,10 +51,6 @@ def write_brief(ctx, results, bad, size):
     return path
 
 
-def state_dir(ctx):
-    return ".claude/ratchet/evidence/%s/_state" % ctx.slug
-
-
 def run_b1(ctx):
     cfg = ctx.cfg
     ctx.base()
@@ -50,11 +59,11 @@ def run_b1(ctx):
     dirs = common.pin_dirs(ctx.root, ctx.slug)
     # The state files (config, architecture, learnings) change with the human's OK, so a change
     # is a question for the human, not something to undo. An agent can also weaken a gate there.
-    state_bad = common.check_pins(ctx.root, [d for d in dirs if d == state_dir(ctx)])
+    state_bad = common.check_pins(ctx.root, [d for d in dirs if d == ctx.state_dir()])
     if state_bad:
         raise RsError("state files changed: %s; show the diff to the human, then re-lock or restore %s"
-                      % (", ".join(p for _, p, _ in state_bad), state_dir(ctx)))
-    bad = common.check_pins(ctx.root, [d for d in dirs if d != state_dir(ctx)])
+                      % (", ".join(p for _, p, _ in state_bad), ctx.state_dir()))
+    bad = common.check_pins(ctx.root, [d for d in dirs if d != ctx.state_dir()])
     if bad:
         restore_pins(ctx, bad)
         common.write_text(evidence, "pinned files changed and restored:\n"
@@ -70,6 +79,9 @@ def run_b1(ctx):
     all_cmd = (cfg["behavior"].get("all") or "").strip()
     if all_cmd:
         runs.append({"id": "behavior", "kind": "command", "run": all_cmd, "when": [], "gate": ["b1"]})
+    pinned = pinned_check(ctx)
+    if pinned:
+        runs.insert(0, pinned)
     if not runs:
         raise RsError("no checks to run: set behavior.all or a command check for b1")
     results = run_checks(ctx, runs)
@@ -77,9 +89,11 @@ def run_b1(ctx):
 
     size, test_lines = size_info(ctx)
     # A check that failed before the checkpoint started is not this checkpoint's failure. The
-    # comparison is per check, because test names are not comparable across runners.
-    baseline = common.read_json(ctx.evp("0-baseline.json"), default={}) or {}
-    baseline_failing = [r["id"] for r in results if not r["ok"] and baseline.get(r["id"]) is False]
+    # comparison is per check, because test names are not comparable across runners. The pinned
+    # tests are new, so the baseline never excuses them. It excuses behavior.all, which holds them too.
+    baseline =common.read_json(ctx.evp("0-baseline.json"), default={}) or {}
+    baseline_failing = [r["id"] for r in results
+                        if not r["ok"] and r["id"] != PINNED and baseline.get(r["id"]) is False]
     failing = [r["id"] for r in results if not r["ok"] and r["id"] not in baseline_failing]
     shown = "prod %d/%s" % (size["prod"], size["est"] if size["est"] else "-")
     if baseline_failing:
@@ -98,6 +112,7 @@ def run_b1(ctx):
         "brief": common.rel(ctx.root, brief) if brief else None})
     res.round_key = "b1"
     res.advance = "B2" if ctx.has_visual() else "B3"
+    res.state = {"baselineFailing": baseline_failing}  # the B4 report shows it
     res.prod = size["prod"]
     res.tests = test_lines
     return res

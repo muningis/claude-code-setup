@@ -7,6 +7,11 @@ import common
 from common import RsError
 
 STATUSES = ("todo", "red", "green", "approved", "approved-unverified", "blocked", "superseded")
+SHA_LENGTH = 12
+
+
+def short_sha(sha):
+    return sha[:SHA_LENGTH]
 
 
 def set_cells(line, header, changes):
@@ -18,6 +23,37 @@ def set_cells(line, header, changes):
         if name in header:
             cells[header.index(name)] = value
     return "| " + " | ".join(cells) + " |"
+
+
+def update_plan(root, slug, cp, changes, note=""):
+    """Replace cells of the row <cp> in the plan table, and add a note line under `## Notes`.
+
+    `changes` maps a column name to its new text. Returns the plan path."""
+    path = common.plan_path(root, slug)
+    lines = common.read_text(path).splitlines()
+    header = None
+    done = False
+    for i, line in enumerate(lines):
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [c.lower() for c in common._split_row(line)]
+        if header is None and "id" in cells and "status" in cells:
+            header = cells
+            continue
+        if header is not None and common._split_row(line)[:1] == [cp]:
+            lines[i] = set_cells(line, header, changes)
+            done = True
+            break
+    if not done:
+        raise RsError("no row %s in %s" % (cp, common.rel(root, path)))
+    if note:
+        if not any(l.strip() == "## Notes" for l in lines):
+            lines += ["", "## Notes"]
+        lines.append("- %s · %s" % (cp, note))
+    common.write_text(path, "\n".join(lines) + "\n")
+    # Parse again, so that a broken table fails here and not in the next gate.
+    common.parse_plan_text(common.read_text(path))
+    return path
 
 
 def main(argv):
@@ -38,35 +74,12 @@ def main(argv):
                 raise RsError("status must be one of: %s" % ", ".join(STATUSES))
             changes["status"] = pos[2]
         if "--base" in opts:
-            changes["base"] = opts["--base"][:12]
+            changes["base"] = short_sha(opts["--base"])
         note = (opts.get("--note") or "").strip()
         if not changes and not note:
             raise RsError("nothing to change: give a status, --base or --note")
         root = common.repo_root()
-        path = common.plan_path(root, slug)
-        lines = common.read_text(path).splitlines()
-        header = None
-        done = False
-        for i, line in enumerate(lines):
-            if not line.lstrip().startswith("|"):
-                continue
-            cells = [c.lower() for c in common._split_row(line)]
-            if header is None and "id" in cells and "status" in cells:
-                header = cells
-                continue
-            if header is not None and common._split_row(line)[:1] == [cp]:
-                lines[i] = set_cells(line, header, changes)
-                done = True
-                break
-        if not done:
-            raise RsError("no row %s in %s" % (cp, common.rel(root, path)))
-        if note:
-            if not any(l.strip() == "## Notes" for l in lines):
-                lines += ["", "## Notes"]
-            lines.append("- %s · %s" % (cp, note))
-        common.write_text(path, "\n".join(lines) + "\n")
-        # Parse again, so that a broken table fails here and not in the next gate.
-        common.parse_plan_text(common.read_text(path))
+        path = update_plan(root, slug, cp, changes, note)
         summary = "%s: %s" % (cp, ", ".join("%s=%s" % kv for kv in sorted(changes.items())) or "note added")
         return common.emit("row", "pass", summary, evidence=path, nonce=nonce, root=root,
                            extra={"cp": cp, "changes": changes})

@@ -59,7 +59,8 @@ from round 4.
 ## Learning
 
 - `learnings.md` holds numbered rules, each with a scope, a check, a source and
-  counters. Agents get only the rules whose scope matches the checkpoint's files.
+  counters. The spec and implement agents get each active rule. The reviewers get only
+  the rules whose scope matches the changed files.
 - A dream reads past runs and proposes 3 changes or fewer, each with evidence. It runs
   each night through launchd, or when you ask. You approve each item.
 - Once a week, a dream can propose one change to an agent prompt. An eval replay must

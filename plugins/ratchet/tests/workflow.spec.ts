@@ -16,7 +16,7 @@ type Call = {
   opts: Record<string, any>;
 };
 type Reply = Body | null | ((call: Call) => Body | null);
-type Script = { state: Reply; gates?: Record<string, Reply>; agents?: Record<string, Reply> };
+type Script = { state: Reply; gates?: Record<string, Reply>; agents?: Record<string, Reply>; wait?: Reply };
 
 const ARGS = {
   repo: "/repo",
@@ -66,7 +66,8 @@ async function dryRun(script: Script, args: Record<string, any> = ARGS) {
     if (words.includes("--nonce")) call.nonce = words[words.indexOf("--nonce") + 1];
     if (words.includes("--round")) call.round = Number(words[words.indexOf("--round") + 1]);
     calls.push(call);
-    const body = reply(gate ? script.gates?.[gate] : script.state, call);
+    const source = gate ? script.gates?.[gate] : words[0] === "wait" ? script.wait : script.state;
+    const body = reply(source, call);
     if (body === null) return null;
     return { ok: true, cmd: call.name, nonce: call.nonce, verdict: "pass", summary: "", ...body };
   };
@@ -202,13 +203,34 @@ describe("checkpoint workflow", () => {
 
     const impls = calls.filter((c) => c.type === "ratchet:implement");
     expect(impls.map((c) => c.opts.model)).toEqual(["sonnet", "sonnet", "sonnet", "opus", "opus"]);
-    expect(impls[0].prompt).not.toContain("Brief");
+    // A decision before round 1 leaves a brief there, so round 1 always names the path.
+    expect(impls[0].prompt).toContain(`Brief, if it exists: /repo/${EV}/1-brief-r1.md`);
     expect(impls[2].prompt).toContain(`Brief: /repo/${EV}/1-brief-r3.md`);
     expect(calls.filter((c) => c.name === "gate b1")).toHaveLength(5);
     expect(calls.some((c) => c.name === "gate smoke")).toBe(false);
     expect(result.status).toBe("needs-decision");
     expect(result.rounds.b1).toBe(5);
     expect(result.question).toContain("3 checks failing");
+  });
+
+  test("a gate that still runs is awaited in steps, and the wait's own nonce is checked", async () => {
+    const { result, calls } = await dryRun({
+      state: stateAt("B1"),
+      gates: {
+        b1: { verdict: "pending", job: "b1-r1-n1-2", summary: "started" },
+        smoke: { summary: "no smoke checks" },
+        "b3-prep": { patch: `${EV}/3-patch-r1.diff`, structural: true },
+        b3: { summary: "no blocking findings" },
+      },
+      wait: seq({ verdict: "pending", job: "b1-r1-n1-2", summary: "still running" }, { verdict: "pass", summary: "12 checks pass" }),
+      agents: { "ratchet:implement": IMPL_OK, "ratchet:review-arch": review("arch"), "ratchet:review-break": review("break") },
+    });
+
+    expect(result.status).toBe("ready-for-B4");
+    const waits = calls.filter((c) => c.name === "wait");
+    expect(waits).toHaveLength(2);
+    expect(waits[0].prompt).toContain("wait s cp2 b1-r1-n1-2 --nonce n1-3 --timeout 480");
+    expect(calls.find((c) => c.name === "gate b1")?.prompt).toContain("--detach");
   });
 
   test("a relay that answers with the wrong nonce is a harness error", async () => {

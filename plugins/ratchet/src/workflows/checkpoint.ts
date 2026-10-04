@@ -31,7 +31,10 @@ import {
   implementModel,
   INVALID_RECAPTURES,
   isInvalidCapture,
+  isSafeJob,
   makeNonce,
+  MAX_WAITS,
+  waitCommand,
   parseArgs,
   readySummary,
   sentence,
@@ -57,7 +60,7 @@ const STRINGS = { type: "array", items: { type: "string" } };
 const LEVELS = ["high", "medium", "low"];
 
 // Every RS command adds its own fields, so the relay schema names only the shared ones
-// and allows the rest. `evidence` is left out: b3-prep returns a list where other gates return a path.
+// and allows the rest. `pending` comes from a detached gate that still runs.
 const RELAY_SCHEMA = {
   type: "object",
   additionalProperties: true,
@@ -65,11 +68,16 @@ const RELAY_SCHEMA = {
     ok: { type: "boolean" },
     cmd: { type: "string" },
     nonce: { type: ["string", "null"] },
-    verdict: { type: "string", enum: ["pass", "fail", "error"] },
+    verdict: { type: "string", enum: ["pass", "fail", "error", "pending"] },
     summary: { type: "string" },
+    job: { type: "string" },
   },
   required: ["ok"],
 };
+
+// rs keys the round-2 triage on these IDs, so a free-form ID would lose a finding.
+const FINDING_ID = { type: "string", pattern: "^[A-Za-z0-9._-]+-[AB][0-9]+-[0-9]+$" };
+const VISUAL_ID = { type: "string", pattern: "^[A-Za-z0-9._-]+-V[0-9]+-[0-9]+$" };
 
 const SPEC_SCHEMA = {
   type: "object",
@@ -118,11 +126,13 @@ const VISUAL_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: VISUAL_ID,
           element: { type: "string" },
           kind: { type: "string", enum: ["position", "size", "color", "missing", "extra", "text", "other"] },
           delta: { type: "object", properties: { px: { type: "number" }, color: { type: "number" } } },
           engine: { type: "boolean" },
+          deferred: { type: "boolean" },
+          waived: { type: "boolean" },
           severity: { type: "string", enum: LEVELS },
           fixable: { type: "boolean" },
           location: { type: "string" },
@@ -145,7 +155,7 @@ const REVIEW_SCHEMA = {
       items: {
         type: "object",
         properties: {
-          id: { type: "string" },
+          id: FINDING_ID,
           severity: { type: "string", enum: LEVELS },
           file: { type: "string" },
           line: { type: "number" },
@@ -186,6 +196,7 @@ type ReviewInput = {
   tripwire: string | null;
   checks: string[];
   concerns: string;
+  report: string | null;
 };
 
 function agentOpts(
@@ -204,14 +215,24 @@ function agentOpts(
 function relayPrompt(cfg: Config, command: string): string {
   return [
     `Run this one command from ${cfg.repo} and return the JSON object it prints, unchanged.`,
-    "Exit codes 1 and 2 are normal. Run nothing else.",
+    "Give the Bash call a timeout of 600000 ms. Exit codes 1 and 2 are normal. Run nothing else.",
     "",
     command,
   ].join("\n");
 }
 
-function specPrompt(cfg: Config, round: number, out: string, retry: { evidence: string | null } | null): string {
-  const lines = [`Write the spec for checkpoint ${cfg.cp} of plan ${cfg.slug}.`, `Repo: ${cfg.repo}`, `Round: ${round}`];
+// b0-prep writes context.md (row, notes, documents, commands, budget) and learnings.md; the
+// lead writes decisions.md. Every agent gets the same three paths.
+function sharedLines(ev: string): string[] {
+  return [
+    `Read first: ${ev}/context.md`,
+    `Learnings that apply: ${ev}/learnings.md`,
+    `Decisions of the human, if the file exists: ${ev}/decisions.md`,
+  ];
+}
+
+function specPrompt(cfg: Config, ev: string, round: number, out: string, retry: { evidence: string | null } | null): string {
+  const lines = [`Write the spec for checkpoint ${cfg.cp} of plan ${cfg.slug}.`, `Repo: ${cfg.repo}`, `Round: ${round}`, ...sharedLines(ev)];
   if (retry) {
     lines.push(
       retry.evidence ? `The spec gate failed. Read ${retry.evidence} and fix the spec.` : "The spec gate failed. Fix the spec.",
@@ -221,12 +242,14 @@ function specPrompt(cfg: Config, round: number, out: string, retry: { evidence: 
   return lines.join("\n");
 }
 
-function implementPrompt(cfg: Config, round: number, spec: string, out: string, fix: Fix | null): string {
+function implementPrompt(cfg: Config, ev: string, round: number, spec: string, out: string, fix: Fix | null): string {
   const lines = [
     `Build checkpoint ${cfg.cp} of plan ${cfg.slug}.`,
     `Repo: ${cfg.repo}`,
     `Round: ${round}`,
     `Spec: ${spec}`,
+    ...sharedLines(ev),
+    `Earlier attempts, if the file exists: ${ev}/1-attempts.md`,
   ];
   if (fix) {
     if (fix.path) lines.push(`${fix.label}: ${fix.path}`);
@@ -243,20 +266,30 @@ function imageLines(repo: string, images: unknown): string[] {
     .map((im) => `- viewport ${im.viewport}: impl ${absPath(repo, String(im.impl))}, ref ${im.ref ? absPath(repo, String(im.ref)) : "none"}`);
 }
 
-function visualPrompt(cfg: Config, round: number, images: string[], capture: string | null, out: string): string {
-  const lines = [`Judge the capture for checkpoint ${cfg.cp} of plan ${cfg.slug}.`, `Repo: ${cfg.repo}`, `Round: ${round}`];
+function visualPrompt(cfg: Config, ev: string, round: number, images: string[], capture: string | null, out: string): string {
+  const lines = [
+    `Judge the capture for checkpoint ${cfg.cp} of plan ${cfg.slug}.`,
+    `Repo: ${cfg.repo}`,
+    `Round: ${round}`,
+    // context.md holds the row's scope line and the human's waive(...) lines.
+    ...sharedLines(ev),
+  ];
   if (images.length > 0) lines.push("Images:", ...images);
   if (capture) lines.push(`Capture evidence: ${capture}`);
   lines.push(`Write your JSON output to ${out}.`);
   return lines.join("\n");
 }
 
-function reviewPrompt(cfg: Config, role: string, round: number, input: ReviewInput, out: string): string {
+function reviewPrompt(cfg: Config, ev: string, role: string, round: number, input: ReviewInput, out: string): string {
   const lines = [
     `Review checkpoint ${cfg.cp} of plan ${cfg.slug} as the ${role} reviewer.`,
     `Repo: ${cfg.repo}`,
     `Round: ${round}`,
+    `Use finding IDs of the form ${cfg.cp}-${role === "arch" ? "A" : "B"}${round}-<n>.`,
+    ...sharedLines(ev),
   ];
+  // The breaker traces the code first, then tests the implementer's claims.
+  if (role === "break" && input.report) lines.push(`Implementer report, to read last: ${input.report}`);
   if (input.patch) lines.push(`Patch: ${input.patch}`);
   if (input.delta) lines.push(`Delta since the last review: ${input.delta}`);
   if (input.previous) lines.push(`Your previous verdict: ${input.previous}`);
@@ -271,6 +304,7 @@ async function run(cfg: Config): Promise<Result> {
   const abs = (path: string) => absPath(cfg.repo, path);
   const evRel = (file: string) => `${evidenceDir(cfg.slug, cfg.cp)}/${file}`;
   const evAbs = (file: string) => abs(evRel(file));
+  const evDir = abs(evidenceDir(cfg.slug, cfg.cp));
   const pathOrNull = (value: unknown) => (typeof value === "string" && value !== "" ? abs(value) : null);
 
   let epoch = cfg.epoch;
@@ -326,7 +360,8 @@ async function run(cfg: Config): Promise<Result> {
     return res;
   };
 
-  // A gate that cannot run ends the run. Callers see only pass or fail.
+  // A gate that cannot run ends the run. Callers see only pass or fail. Each gate runs
+  // detached, and the engine waits for it in steps that fit the relay's Bash limit.
   const gate = async (
     name: string,
     round: number,
@@ -335,8 +370,15 @@ async function run(cfg: Config): Promise<Result> {
   ) => {
     nonceCount += 1;
     const nonce = makeNonce(cfg.nonce, nonceCount);
-    const command = gateCommand(cfg.rs, name, cfg.slug, cfg.cp, nonce, round, opts.extra || []);
-    const res = await relay(`gate ${name} r${round}`, command, nonce, phaseTitle);
+    const command = gateCommand(cfg.rs, name, cfg.slug, cfg.cp, nonce, round, [...(opts.extra || []), "--detach"]);
+    let res = await relay(`gate ${name} r${round}`, command, nonce, phaseTitle);
+    for (let waits = 0; gateVerdict(res) === "pending"; waits++) {
+      if (waits >= MAX_WAITS) throw stop("harness-error", `The ${name} gate still runs after ${waits} waits.`);
+      if (!isSafeJob(res.job)) throw stop("harness-error", `The ${name} gate returned a bad job ID.`);
+      nonceCount += 1;
+      const waitNonce = makeNonce(cfg.nonce, nonceCount);
+      res = await relay(`wait ${name} r${round}`, waitCommand(cfg.rs, cfg.slug, cfg.cp, res.job, waitNonce), waitNonce, phaseTitle);
+    }
     const verdict = gateVerdict(res);
     log(`${name} round ${round}: ${verdict}. ${clip(res.summary, 120)}`);
     note(name, res);
@@ -371,7 +413,7 @@ async function run(cfg: Config): Promise<Result> {
     for (let n = 1; n <= SPEC_ROUNDS; n++) {
       const r = base.b0 + n;
       const spec = await agent(
-        specPrompt(cfg, r, evAbs("0-spec.json"), retry),
+        specPrompt(cfg, evDir, r, evAbs("0-spec.json"), retry),
         agentOpts("ratchet:spec", `spec r${r}`, P.b0, SPEC_SCHEMA, cfg.models.spec),
       );
       if (!spec) throw stop("harness-error", "The spec agent returned nothing.");
@@ -379,7 +421,8 @@ async function run(cfg: Config): Promise<Result> {
       rounds.b0 = r;
       if (g.pass) return;
       if (capExhausted(n, SPEC_ROUNDS)) {
-        throw stop("blocked", `The spec gate failed after ${n} rounds. ${sentence(g.res.summary)}`);
+        const why = `The spec gate failed after ${n} rounds. ${sentence(g.res.summary)}`;
+        throw stop("blocked", why, why);
       }
       retry = { evidence: pathOrNull(g.res.evidence) };
     }
@@ -393,11 +436,12 @@ async function run(cfg: Config): Promise<Result> {
     for (let n = 1; n <= cfg.caps.b1; n++) {
       implRound += 1;
       const r = implRound;
-      // After a human decision the run restarts here. The last failed b1 gate left the brief for this round.
+      // A run that restarts here finds the brief for this round: the last failed gate wrote it,
+      // or `RS decide --reopen b1` did, also before round 1.
       const resumed: Fix | null =
-        n === 1 && r > 1 ? { label: "Brief, if it exists", path: evAbs(`1-brief-r${r}.md`), summary: "" } : null;
+        n === 1 ? { label: "Brief, if it exists", path: evAbs(`1-brief-r${r}.md`), summary: "" } : null;
       const impl = await agent(
-        implementPrompt(cfg, r, evAbs("0-spec.json"), evAbs(`1-impl-r${r}.json`), fix || resumed),
+        implementPrompt(cfg, evDir, r, evAbs("0-spec.json"), evAbs(`1-impl-r${r}.json`), fix || resumed),
         agentOpts("ratchet:implement", `implement r${r}`, P.b1, IMPLEMENT_SCHEMA, implementModel(r, cfg.models)),
       );
       if (!impl) throw stop("harness-error", "The implement agent returned nothing.");
@@ -445,7 +489,7 @@ async function run(cfg: Config): Promise<Result> {
         // Identical captures and no regression change: nothing for the visual agent to judge.
         if (capture.pass) return;
         const visual = await agent(
-          visualPrompt(cfg, r, imageLines(cfg.repo, capture.res.images), pathOrNull(capture.res.evidence), evAbs(`2-visual-r${r}.json`)),
+          visualPrompt(cfg, evDir, r, imageLines(cfg.repo, capture.res.images), pathOrNull(capture.res.evidence), evAbs(`2-visual-r${r}.json`)),
           agentOpts("ratchet:visual", `visual r${r}`, P.b2, VISUAL_SCHEMA, cfg.models.visual),
         );
         if (!visual) throw stop("harness-error", "The visual agent returned nothing.");
@@ -489,12 +533,14 @@ async function run(cfg: Config): Promise<Result> {
         tripwire: pathOrNull(prep.res.tripwire),
         checks: [prep.res.checkOutputs].flat().filter((p) => typeof p === "string" && p !== "").map(abs),
         concerns: clip(concerns.join("; "), 600),
+        report: implRound > 0 ? evAbs(`1-impl-r${implRound}.json`) : null,
       };
       const outs = await parallel(
         roles.map((role) => () =>
           agent(
             reviewPrompt(
               cfg,
+              evDir,
               role,
               r,
               // A skipped arch reviewer leaves its verdict in an older round.

@@ -73,7 +73,9 @@ Each `RS` command that the engine calls prints one JSON object on stdout. The ob
 
 - `ok` is true when the command ran, also when the verdict is `fail`. Only `verdict`
   decides.
-- `verdict` is `pass`, `fail` or `error`.
+- `verdict` is `pass`, `fail`, `error`, or `pending` for a detached gate that still runs.
+- The engine checks the `nonce`. `sha256` is for the audit trail: the engine cannot hash
+  files.
 - The exit code is 0 for `pass`, 1 for `fail` and 2 for `error`. Exit codes 1 and 2 are
   normal results, not crashes.
 - Each command that the engine calls takes `--nonce <n>` and echoes it. This includes
@@ -104,6 +106,8 @@ Each `RS` command that the engine calls prints one JSON object on stdout. The ob
 - `stage` is `B0`, `B1`, `B2`, `B3`, `B4`, `B5` or `done`.
 - When `STATE` does not exist, `RS state` derives the stage from the row status:
   `todo` gives `B0`, `red` gives `B1`, `green` gives `B4`, `approved` gives `done`.
+- Gate b1 adds `baselineFailing`, and `RS report` reads it.
+- A detached gate keeps its files in `EV/.jobs/<job>.json`, `.err` and `.pid`.
 
 ## `RS state <slug> [<cp>]`
 
@@ -128,18 +132,38 @@ Each gate updates `STATE`, writes its evidence and adds one line to `METRICS`.
 rounds of a gate from `STATE.rounds.<gate> + 1`, so evidence file names never repeat.
 Caps count only the rounds of one engine run. `RS decide` does not reset the rounds.
 
+**Detached runs.** A relay's Bash call stops after 10 minutes, and a gate can take longer.
+So the engine adds `--detach`:
+1. `RS gate … --detach` starts the gate as a background job in its own session. It prints
+   `{ "verdict": "pending", "job": "<job id>" }` at once.
+2. `RS wait <slug> <cp> <job> --nonce <n> --timeout 480` waits for the job. It prints the
+   gate's result with the wait's own nonce, or `pending` after the timeout.
+3. The engine sends `RS wait` again, 15 times or fewer, until the verdict is not
+   `pending`.
+
+**Plan rows and live roles.** A gate that passes `b0` sets the row to `red`. A gate that
+passes `b3` sets it to `green`. After each gate, `LIVE.roles` names the role or roles that
+work next, so den can draw them.
+
 ### `b0-prep`: before the spec agent
 
 The engine runs this gate when it starts a row at `B0`, before the spec agent writes a
 file. Gate `b0` needs the base, because it finds the spec set as the files changed since
 `base`.
 
-1. Snapshot `base`, unless it exists. A resumed row keeps its base.
-2. Run the baseline once: each check with `"b1"` in its `gate` list (whatever its `when`
+1. Run the baseline once: each check with `"b1"` in its `gate` list (whatever its `when`
    globs), then `behavior.all`. Write `0-baseline.txt` and `0-baseline.json`
    (`{ "<check id>": true | false }`).
-3. Pin the state files in `PIN`: `config.json`, `learnings.md` and `architecture.md`.
-4. Write `LIVE` with `active: true`.
+2. Snapshot `base`, unless it exists. A resumed row keeps its base. The baseline runs
+   first, so the files that the tests leave behind are part of the base.
+3. Put the short base SHA in the row's `base` column.
+4. Pin the state files in `PIN`: `config.json`, `learnings.md` and `architecture.md`.
+5. Write `EV/context.md` for the agents. It holds these items:
+   - the plan path, the row, and its lines from `## Notes` (scope, done when, waivers)
+   - the change documents and the architecture path
+   - the test commands, the test budget and the visual tolerance
+6. Write `EV/learnings.md`: all active learnings, and the text outside the entries.
+7. Write `LIVE` with `active: true`.
 
 Added fields: `base`, `baselineFailing` (the checks that failed before the row started),
 `statePins`.
@@ -154,10 +178,14 @@ Run this gate after the spec agent returns.
 3. Trace: each case name contains a requirement ID from the row's `reqs`. Each ID in
    `reqs` that has coverage kind `test` has one or more cases.
 4. Compare the case count with `tests.perRequirement` and `tests.perCheckpoint`.
-5. Pin the test files. Snapshot `red`. Set the stage to `B1`.
+5. An earlier test that this spec changed is an amendment. Lock it again in the older
+   checkpoint's `EV`, and add `- <path>: <reason>` to `EV/0-amendments.md`. Else the older
+   pin would undo the change in every round.
+6. Pin the test files. Snapshot `red`. Set the stage to `B1`.
 
 Added fields: `cases`, `red` (`assert`, `stub`, `compile`, `runner`, `pass`: counts),
-`trace` (`missing`, `unknown`), `budget` (`cases`, `limit`, `over`), `tests`, `stubs`.
+`trace` (`missing`, `unknown`), `budget` (`cases`, `limit`, `over`), `tests`, `stubs`,
+`amended`.
 
 The verdict is `fail` when `compile`, `runner` or `pass` is above zero, or when
 `trace.missing` is not empty. For a `refactor` row, each case must pass.
@@ -168,23 +196,26 @@ The verdict is `fail` when `compile`, `runner` or `pass` is above zero, or when
    fail.
 2. Run `RS check` on `PIN`. When a state file changed, stop with `error`. Do not restore
    it: the human decides (see `run.md`).
-3. Run each check with `"b1"` in its `gate` list, in order, when a changed file matches
+3. Run the check `pinned`: `behavior.one` on the tests that this checkpoint pinned. They
+   must pass. The baseline never exempts them.
+4. Run each check with `"b1"` in its `gate` list, in order, when a changed file matches
    its `when` globs. Then run `behavior.all`. Each command runs through `RS exec` with
    its timeout.
-4. A check that also failed in the baseline does not fail the gate. It goes into
-   `baselineFailing`. The comparison is for each check, because test names cannot be
-   compared across runners.
-5. Count production lines (`RS size --prod`) and compare them with the row's `est`. This
+5. A check other than `pinned` that also failed in the baseline does not fail the gate.
+   It goes into `baselineFailing`, and the B4 report shows it. The comparison is for
+   each check, because test names cannot be compared across runners.
+6. Count production lines (`RS size --prod`) and compare them with the row's `est`. This
    result is advisory.
-6. When a check fails, write the brief for the next round to `EV/1-brief-r<r+1>.md`.
+7. When a check fails, write the brief for the next round to `EV/1-brief-r<r+1>.md`.
 
 Added fields:
 - `checks` (`id`, `ok`, `ms`), `failing`, `baselineFailing` and `pinsChanged`
 - `size` (`prod`, `est`, `ratio`)
 - `brief`: the path of the next brief, or null when the gate passes
 
-Round 1 has no brief. The implementer reads the design log instead. In a fix round for
-B2 or B3, the brief is the visual file or the triage file.
+The engine always names the brief of the next round, "if it exists". `RS decide --reopen
+b1` can write one before round 1. In a fix round for B2 or B3, the brief is the visual
+file or the triage file.
 
 ### `b2-capture`: before the visual judgment
 
@@ -206,7 +237,9 @@ Added fields:
 ### `b2`: after the visual judgment
 
 The gate reads `EV/2-visual-r<r>.json` in the visual schema below. It applies
-`visual.tolerance` (see `config.md`).
+`visual.tolerance` (see `config.md`). It also reads `EV/2-capture-r<r>.json`: each target
+in `regressChanged` without a waiver blocks, with the ID `<cp>-V<r>-<100+n>` and the kind
+`regression`.
 
 Added fields: `blocking`, `advisory`, `renderer` (the count of differences that the
 renderer causes).
@@ -254,12 +287,19 @@ architecture reviewer, it passes `--skip-arch`. The gate writes the full triage 
 - All other findings are advisory.
 - In round 2 and later, the gate runs each open blocking proof again. A proof that does
   not reproduce marks its finding as addressed.
+- A finding ID that does not match `<cp>-<A|B><round>-<n>` gets a new ID
+  `<cp>-<A|B><r>-<900+n>`, and the triage keeps the old one as `rawId`. Later rounds
+  match a finding by either ID, so a bad ID cannot stay open for good.
+- A rule of a retired learnings entry does not count as an existing rule.
 
 Added fields: `triage` (its path), `blocking`, `advisory`, `unproven`, `addressed`,
 `notAddressed`.
 
 The verdict is `pass` when `blocking` is empty. Then the gate snapshots `gated` and sets
 the stage to `B4`.
+
+Before review, `b3-prep` writes `EV/learnings.md` again, with only the learnings whose
+scope matches the files that changed since `base`.
 
 ## `RS prove <slug> <cp> <finding-id>`
 
@@ -270,7 +310,9 @@ The command runs `proof.cmd` from the repo root, with the timeout in
   `proof.pattern`.
 - A timeout, or a missing pattern, gives `unproven`.
 - After the proof runs, the command checks that the tree outside `EV/` did not change.
-  If it changed, the command restores the tree and marks the proof `invalid`.
+  If it changed, the command copies each changed file to `EV/proofs/<id>.backup/`, then
+  restores the tree and marks the proof `invalid`. The backup keeps an edit that a human
+  made during the proof.
 
 Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `ms`.
 
@@ -278,6 +320,7 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 
 | Command | Does | Output |
 | --- | --- | --- |
+| `RS wait <slug> <cp> <job> --nonce <n> [--timeout <s>]` | Waits for a detached gate, 540 seconds or fewer. See "Detached runs". | the gate's JSON, or `pending` |
 | `RS red-check <output-file>` | Classifies each failure as `assert`, `stub`, `compile` or `runner`, with `behavior.failureKinds` | JSON counts |
 | `RS size --prod <tree>` | Counts the added and deleted lines since `<tree>`. It ignores tests, lockfiles, binaries, generated files and `R/`. | JSON `prod`, `tests` |
 | `RS check <dir>...`, `RS restore <dir>` | Version 1 commands: find changed pinned files, and put them back. They keep their text output. | text |
@@ -289,11 +332,11 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 | `RS live set <key> <value>` | Updates one `LIVE` field | JSON |
 | `RS live stop` | Sets `active: false` | JSON |
 | `RS metrics add <json>` | Adds one line to `METRICS` | JSON |
-| `RS report <slug> <cp>` | Writes `EV/4-report.md` | 10 lines of text or fewer, for the human |
-| `RS decide <slug> <cp> <text> [--reopen b1\|b3]` | Adds the human's decision to `EV/decisions.md` and increments `epoch`. With `--reopen`, it sets the stage, and the next brief starts with the decision. | JSON |
+| `RS report <slug> <cp>` | Writes `EV/4-report.md`. The short form names the files, the judgment calls, the advisory findings, the device checks, the size, and the checks that failed before the row started. | 10 lines of text or fewer, for the human |
+| `RS decide <slug> <cp> <text> [--reopen b1\|b3]` | Adds the human's decision to `EV/decisions.md` and increments `epoch`. With `--reopen`, it sets the stage, and puts the decision at the top of the next brief. It keeps the rest of that brief. | JSON |
 | `RS retire <slug> <cp> <path> --reason <text>` | Unpins one test file. It records the reason in `EV/0-amendments.md`. | JSON |
 | `RS keepawake start\|stop` | Starts or stops `caffeinate`, so that the Mac does not sleep during a run. It does nothing on other systems. | JSON |
-| `RS learnings --scope <path>...` | Prints the active learnings entries whose scope matches one of the paths, and the matching stack rules | markdown |
+| `RS learnings --scope <path>...` or `RS learnings --all` | Prints the active learnings entries whose scope matches one of the paths (or all of them), the text outside the entries, and the matching stack rules | markdown |
 | `RS stelint <path>...` | Checks the STE-lite rules in `docs.md` | JSON |
 | `RS doclint <path>... [--approval] [--approve <file>]` | Checks the document rules in `docs.md`. `--approve` records the approved body. | JSON |
 | `RS dream <step> ...` | `harvest`, `curate <date>`, `apply <date> ...`, `install`, `uninstall`. See `dream.md`. | JSON |

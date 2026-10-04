@@ -68,6 +68,8 @@ def main(argv):
             if isinstance(f, dict) and f.get("id"):
                 issues[str(f["id"])] = short(f.get("issue") or "", 120)
     advisory = state["open"]["advisory"]
+    # The last b1 result: the checks that failed before the row and fail still. b1 passed over them.
+    baseline_failing = [str(c) for c in state.get("baselineFailing") or []]
 
     manual = [c for c in cfg["checks"] if c["kind"] in ("device", "manual")
               and (not c["when"] or any(common.glob_match(g, p) for g in c["when"] for p in paths))]
@@ -90,6 +92,8 @@ def main(argv):
     md += ["", "## Judgment calls (%d)" % len(calls)] + ["- " + c for c in calls]
     md += ["", "## Advisory findings (%d)" % len(advisory)]
     md += ["- %s%s" % (i, ": " + issues[i] if i in issues else "") for i in advisory]
+    md += ["", "## Failed before the row started, and still fail (%d)" % len(baseline_failing)]
+    md += ["- " + c for c in baseline_failing]
     md += ["", "## Checks for you"]
     md += ["- %s (%s): %s" % (c["id"], c["kind"], c.get("instruct") or c.get("run") or "") for c in manual] or ["- none"]
     md += ["", "## Tests", "- " + tests_line, "", "## Size", "- " + size_line]
@@ -100,7 +104,11 @@ def main(argv):
            "Files: %d changed (%d tests): %s" % (len(files), len(test_files), shown or "none")]
     if calls:
         out.append("Judgment calls (%d): %s" % (len(calls), "; ".join(short(c, 60) for c in calls[:2])))
-    out.append("Advisory findings: %d" % len(advisory))
+    # One line for both: the output keeps 10 lines, and a longer list would cut the report path.
+    line = "Advisory findings: %d" % len(advisory)
+    if baseline_failing:
+        line += "; failed before the row: %s" % short(", ".join(baseline_failing), 60)
+    out.append(line)
     for c in manual[:2]:
         out.append("Check yourself: %s: %s" % (c["id"], short(c.get("instruct") or c.get("run") or "", 80)))
     if len(manual) > 2:

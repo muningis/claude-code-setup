@@ -12,7 +12,7 @@ import urllib.request
 
 import common
 from common import RsError
-from gatekit import Result, merge_open
+from gatekit import Result, merge_open, regression_waivers
 
 READY_SECONDS = 60
 
@@ -100,7 +100,8 @@ def start_server(ctx, vis, log_path):
             if answers(ready):
                 return proc
         elif ready:
-            rc, _ = common.run_command(str(ready), ctx.root, 10)
+            # Each command of the app gets a log. Its output must stay off stdout, which holds the gate result.
+            rc, _ = common.run_command(str(ready), ctx.root, 10, ctx.evp("2-ready-r%d.log" % ctx.round))
             if rc == 0:
                 return proc
         else:
@@ -114,7 +115,7 @@ def stop_server(ctx, vis, proc):
     if proc is not None:
         common.kill_group(proc)
     if vis.get("mode") == "browser" and vis.get("teardown"):
-        common.run_command(vis["teardown"], ctx.root, 60)
+        common.run_command(vis["teardown"], ctx.root, 60, ctx.evp("2-teardown-r%d.log" % ctx.round))
 
 
 def promote(ctx, target, viewports):
@@ -242,6 +243,17 @@ def run_judge(ctx):
             (blocking if over else advisory).append(fid)
         detail.append({"id": fid, "kind": kind, "class": cls, "element": d.get("element"),
                        "severity": d.get("severity"), "location": d.get("location")})
+
+    # An earlier target whose capture changed is a regression, whatever the visual agent saw.
+    cap = common.read_json(ctx.evp("2-capture-r%d.json" % ctx.round), default=None)
+    regressed = cap.get("regressChanged") if isinstance(cap, dict) else None
+    waived = regression_waivers(ctx.root, ctx.slug, ctx.cp)
+    for n, target in enumerate(regressed if isinstance(regressed, list) else [], 1):
+        fid = "%s-V%d-%d" % (ctx.cp, ctx.round, 100 + n)
+        cls = "advisory" if str(target) in waived else "blocking"
+        (advisory if cls == "advisory" else blocking).append(fid)
+        detail.append({"id": fid, "kind": "regression", "class": cls, "element": str(target),
+                       "severity": "high", "location": "an earlier target"})
     evidence = ctx.evp("2-triage-r%d.json" % ctx.round)
     common.write_json(evidence, {"round": ctx.round, "tolerance": tol, "differences": detail,
                                  "blocking": blocking, "advisory": advisory, "engine": engine})

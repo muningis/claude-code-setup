@@ -55,6 +55,10 @@ class Ctx(object):
     def has_visual(self):
         return bool(self.cfg.get("visual")) and self.row["target"] != "-"
 
+    def state_dir(self):
+        """The pins of the state files, as a repo-relative path."""
+        return ".claude/ratchet/evidence/%s/_state" % self.slug
+
 
 class Result(object):
     def __init__(self, verdict, summary, evidence=None, extra=None):
@@ -64,8 +68,10 @@ class Result(object):
         self.extra = extra or {}
         self.evidence_list = None  # b3-prep only: its `evidence` field is an array
         self.advance = None        # stage to move to when the verdict is pass
+        self.row_status = None     # plan row status to set when the verdict is pass
         self.round_key = None      # key of STATE.rounds that this run counts toward
         self.open = None           # new STATE.open
+        self.state = None          # more STATE fields to set
         self.blocking = 0
         self.advisory = 0
         self.prod = 0
@@ -78,8 +84,10 @@ def role_of(fid):
 
 
 def merge_open(old, roles, blocking, advisory):
-    """New STATE.open. A gate replaces only the blocking IDs of its own reviewers; advisory IDs accumulate."""
-    keep = [f for f in old["blocking"] if role_of(f) not in roles]
+    """New STATE.open. A gate replaces only the blocking IDs of its own reviewers; advisory IDs accumulate.
+
+    An ID with no role (a malformed one) belongs to no gate and no later round could close it, so it goes."""
+    keep = [f for f in old["blocking"] if role_of(f) and role_of(f) not in roles]
     adv = list(old["advisory"])
     for f in advisory:
         if f not in adv:
@@ -136,3 +144,53 @@ def size_info(ctx):
     prod, tests, _ = cmd_size.prod_size(ctx.root, ctx.cfg, ctx.base())
     ratio = round(prod / float(est), 2) if est else None
     return {"prod": prod, "est": est, "ratio": ratio}, tests
+
+
+WAIVE_RE = re.compile(r"waive\(([^)]*)\)")
+RANGE_RE = re.compile(r"(\D*?)(\d+)\s*[–-]\s*(\D*?)(\d+)")
+
+
+def plan_notes(root, slug):
+    """The lines after the `## Notes` heading, up to the end of the file: `RS row --note` appends at the end."""
+    out = []
+    inside = False
+    for line in common.read_text(common.plan_path(root, slug)).splitlines():
+        if line.strip() == "## Notes":
+            inside = True
+        elif inside and line.strip():
+            out.append(line.strip())
+    return out
+
+
+def waive_covers(spec, cp):
+    """True when the list in `waive(<spec>)` names cp. An item can be a range, as in `cp5–cp8`."""
+    mine = re.fullmatch(r"(\D*?)(\d+)", cp)
+    for item in re.split(r"[,\s]+", spec.strip()):
+        rng = RANGE_RE.fullmatch(item)
+        if item == cp or (rng and mine and rng.group(1) == mine.group(1) == rng.group(3)
+                          and int(rng.group(2)) <= int(mine.group(2)) <= int(rng.group(4))):
+            return True
+    return False
+
+
+def row_notes(root, slug, cp):
+    """The notes about this row: lines that start with its ID, and waivers that name it."""
+    out = []
+    for line in plan_notes(root, slug):
+        waiver = WAIVE_RE.search(line)
+        if waiver:
+            if waive_covers(waiver.group(1), cp):
+                out.append(line)
+        elif re.match(r"(?:[-*]\s*)?%s(?![A-Za-z0-9-])" % re.escape(cp), line):
+            out.append(line)
+    return out
+
+
+def regression_waivers(root, slug, cp):
+    """The targets that the human let regress: `waive(<cp>): regression <target>`."""
+    targets = set()
+    for line in plan_notes(root, slug):
+        m = re.search(r"waive\(([^)]*)\)\s*:\s*regression\s+([a-z0-9-]+)", line)
+        if m and waive_covers(m.group(1), cp):
+            targets.add(m.group(2))
+    return targets

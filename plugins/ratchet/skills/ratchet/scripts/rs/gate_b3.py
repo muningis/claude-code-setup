@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 import cmd_learnings
 import cmd_prove
@@ -50,6 +51,10 @@ def run_prep(ctx):
         p = ctx.evp("3-check-%s-r%d.txt" % (cmd_prove.safe_name(chk["id"]), r))
         common.write_text(p, render_results([chk]))
         ev_paths.append(common.rel(root, p))
+
+    # The reviewers read the learnings of the files that changed, not the whole file b0-prep wrote.
+    common.write_text(ctx.evp("learnings.md"), cmd_learnings.render(root, ctx.cfg, ctx.changed_paths())
+                      or "No learnings apply to the changed files.\n")
 
     common.snap(root, "%s/%s/review" % (ctx.slug, ctx.cp))
 
@@ -123,12 +128,12 @@ def without_retired(text):
 
 
 def earlier_record(ctx, fid):
-    """The triage record of a finding from an earlier round, newest round first."""
+    """The triage record of a finding from an earlier round, newest round first. The ID or the rawId matches."""
     for k in range(ctx.round - 1, 0, -1):
         data = common.read_json(ctx.evp("3-triage-r%d.json" % k), default=None)
         if isinstance(data, dict) and isinstance(data.get("findings"), list):
             for f in data["findings"]:
-                if isinstance(f, dict) and f.get("id") == fid:
+                if isinstance(f, dict) and fid in (f.get("id"), f.get("rawId")):
                     return f
     return None
 
@@ -141,6 +146,12 @@ def reviewer_statuses(loaded):
             if isinstance(e, dict) and e.get("id") is not None:
                 out[str(e["id"])] = str(e.get("status") or "").upper()
     return out
+
+
+def status_of(statuses, fid, record):
+    """The reviewer's status for a finding. The reviewer knows the ID that it gave, so try the rawId too."""
+    raw = (record or {}).get("rawId")
+    return statuses.get(fid) or (statuses.get(str(raw)) if raw else None)
 
 
 def run_triage(ctx):
@@ -166,9 +177,16 @@ def run_triage(ctx):
             continue
         letter = "A" if role == "arch" else "B"
         for n, f in enumerate(loaded[1], 1):
-            fid = str(f.get("id") or "%s-%s%d-%d" % (ctx.cp, letter, r, n))
+            # Later rounds route a finding by the letter in its ID, so an ID without it gets a new one.
+            raw = str(f["id"]) if f.get("id") is not None else None
+            if raw and re.search(r"-%s\d+-\d+$" % letter, raw):
+                fid = raw
+            else:
+                fid = "%s-%s%d-%d" % (ctx.cp, letter, r, 900 + n)
             rec = {"id": fid, "role": role, "severity": f.get("severity") or "medium", "file": f.get("file"),
                    "line": f.get("line"), "target": f.get("target"), "issue": f.get("issue"), "fix": f.get("fix")}
+            if raw and raw != fid:
+                rec["rawId"] = raw
             if role == "arch":
                 rule = f.get("rule") if isinstance(f.get("rule"), str) and f.get("rule") else None
                 rec["rule"] = rule
@@ -202,12 +220,10 @@ def run_triage(ctx):
                 entry["proofResult"] = pr["result"]
                 # A timeout says nothing about the fix, so the finding stays open.
                 entry["addressed"] = pr["result"] == "unproven" and not pr["timeout"]
-            elif role_of(fid) == "A":
-                entry["via"] = "reviewer"
-                entry["addressed"] = arch_status.get(fid) == "ADDRESSED"
             else:
                 entry["via"] = "reviewer"
-                entry["addressed"] = break_status.get(fid) == "ADDRESSED"
+                statuses = arch_status if role_of(fid) == "A" else break_status
+                entry["addressed"] = status_of(statuses, fid, old) == "ADDRESSED"
             previous.append(entry)
 
     def unique(seq):
@@ -240,6 +256,7 @@ def run_triage(ctx):
         res = Result("pass", "no blocking findings; %d advisory, %d addressed" % (len(advisory), len(addressed)),
                      evidence, extra)
         res.advance = "B4"
+        res.row_status = "green"
     res.round_key = "b3"
     res.open = merge_open(ctx.state["open"], ("A", "B"), blocking, advisory)
     res.blocking = len(blocking)

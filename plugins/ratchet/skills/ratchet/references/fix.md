@@ -8,6 +8,9 @@ gone.
 
 Do the steps in order. Do not skip ahead to "just patch it".
 
+When `.claude/ratchet/config.json` does not exist, do step 1 of `plan.md` first. The
+gates need the test commands.
+
 ## 1. Intake
 
 **From a report:** take the steps, the inputs and the error from the human.
@@ -32,14 +35,19 @@ Do the steps in order. Do not skip ahead to "just patch it".
 
 ## 3. Write the design log
 
-Write `docs/changes/NNNN-<slug>/design-log.md` with `track: fix` (see `docs.md`):
-- `### Current behaviour`: the failure, with the real text.
-- `### Expected behaviour`: one requirement, `FR-001 (test)`.
-- `### Unchanged behaviour`: the behaviour near the bug that must not change, as `UB`
-  requirements.
-- The recipe, in `## Design`.
+Write `docs/changes/NNNN-<slug>/design-log.md` with `track: fix` (see `docs.md`). It
+has these sections:
+- `## Decisions for the implementer`: 3 to 7 bullets. Name the cause, if you know it.
+- `## Problem`, with three subsections:
+  - `### Current behaviour`: the failure, with the real text.
+  - `### Expected behaviour`: one requirement, `FR-001 (test)`.
+  - `### Unchanged behaviour`: the behaviour near the bug that must not change, as `UB`
+    requirements.
+- `## Questions and answers`: the questions that the reproduction answered. One pair is
+  enough, for example "Q1: Does the bug happen on a clean checkout?"
+- `## Design`: the recipe, and the planned fix.
 
-Run `RS doclint` and `RS stelint` on it.
+Run `RS doclint --approval` and `RS stelint` on it. Fix each `block` finding.
 
 ## 4. Plan one row
 

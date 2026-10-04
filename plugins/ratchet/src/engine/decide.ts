@@ -177,7 +177,7 @@ export function checkState(state: any, want: { slug: string; cp: string }): { ok
   if (state.ok === false || state.verdict === "error") {
     return bad(`The state command failed. ${sentence(state.summary) || "No reason given."}`);
   }
-  // The state command takes no nonce. This is the only check that the answer is for this checkpoint.
+  // The nonce proves that the relay answered this call; this proves that the answer is for this checkpoint.
   if (state.slug !== want.slug || state.cp !== want.cp) {
     return bad(`The state is for ${clip(state.slug, 40)}/${clip(state.cp, 40)}, not ${want.slug}/${want.cp}.`);
   }
@@ -221,8 +221,23 @@ export function verifyRelay(res: any, nonce: string | null): { ok: boolean; reas
   return { ok: true, reason: "" };
 }
 
-export function gateVerdict(res: any): "pass" | "fail" | "error" {
-  return res && (res.verdict === "pass" || res.verdict === "fail") ? res.verdict : "error";
+export function gateVerdict(res: any): "pass" | "fail" | "error" | "pending" {
+  const v = res && res.verdict;
+  return v === "pass" || v === "fail" || v === "pending" ? v : "error";
+}
+
+// A relay's Bash call stops after 10 minutes, and a gate can run longer (a full build and
+// suite). So each gate runs detached, and the engine waits in steps below that limit.
+export const WAIT_SECONDS = 480;
+export const MAX_WAITS = 15;
+
+export function waitCommand(rs: string, slug: string, cp: string, job: string, nonce: string): string {
+  return `${rs} wait ${slug} ${cp} ${job} --nonce ${nonce} --timeout ${WAIT_SECONDS}`;
+}
+
+// The job ID comes back from a relay and goes into the next shell command.
+export function isSafeJob(job: unknown): job is string {
+  return typeof job === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(job) && !job.includes("..");
 }
 
 export function classifyImplement(impl: any): {

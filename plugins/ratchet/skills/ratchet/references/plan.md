@@ -43,9 +43,9 @@ design. Keep the questions and answers for the design log.
 
 ## 4. Read before you write
 
-- **A reference implementation** is the spec. Read it. Write
-  `.claude/ratchet/plans/<slug>.reference.md`: for each row, the states, the texts that
-  users see, the data shapes, the edge and error cases, and the source paths.
+- **A reference implementation** is the spec. Read it. Note for each row the states, the
+  texts that users see, the data shapes, the edge and error cases, and the source paths.
+  Step 9 writes these notes to `.claude/ratchet/plans/<slug>.reference.md`.
 - **Prior art.** For code that the goal touches, follow `why.md` when the reason for the
   current design is not clear. Put what you learn in the design log, under
   `## Prior art`.
@@ -54,13 +54,17 @@ design. Keep the questions and answers for the design log.
 
 ## 5. Documents
 
+When the session is in plan mode already, you cannot write files. Then put the drafts in
+the harness plan file, and do steps 1 to 4 after approval, before step 9.
+
 1. Make the folder `docs/changes/NNNN-<slug>/`, with the next free number.
 2. Write the documents of the track, as `docs.md` says, with `status: draft`.
 3. Write each requirement with an `FR` ID and a coverage kind. Each success criterion
    needs one or more requirements. A fix or a refactor needs `UB` requirements for the
    behaviour that must not change.
-4. Run `RS doclint docs/changes/NNNN-<slug>` and `RS stelint docs/changes/NNNN-<slug>`.
-   Fix each `block` finding.
+4. Run `RS doclint --approval docs/changes/NNNN-<slug>` and
+   `RS stelint docs/changes/NNNN-<slug>`. With `--approval`, open questions and word
+   budgets block now, not after the human approves. Fix each `block` finding.
 
 ## 6. Cut the checkpoints
 

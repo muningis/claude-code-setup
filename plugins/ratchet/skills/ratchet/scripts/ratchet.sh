@@ -36,9 +36,13 @@
 # code is 0 for pass, 1 for fail and 2 for error. Any rs/cmd_<name>.py also runs as <name>.
 #
 #   state <slug> [<cp>]        where a checkpoint stands; without <cp>, the first open row
-#   gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--skip-arch]
+#   gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--skip-arch] [--detach]
 #                              run b0-prep, b0, b1, b2-capture, b2, smoke, b3-prep or b3; then
-#                              update STATE and LIVE and add one line to METRICS
+#                              update STATE and LIVE and add one line to METRICS. --detach
+#                              starts the gate as a background job and prints `pending`
+#   wait <slug> <cp> <job> --nonce <n> [--timeout <s>]
+#                              wait for a detached gate (540 s or fewer); print its result
+#                              with this nonce, or `pending`
 #   prove <slug> <cp> <id>     run a finding's proof: reproduced, unproven or invalid
 #   red-check <output-file>    say why a spec run failed: assert, stub, compile or runner
 #   size --prod <tree>         changed production and test lines since <tree>; skips lockfiles,
