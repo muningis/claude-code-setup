@@ -14,6 +14,8 @@ export type DenActor = {
   activity: string
   verdict?: 'approve' | 'changes' | 'fail'
   bornAt: number
+  /** Its last tool call: an agent quiet for long is idle, not working. */
+  seenAt?: number
   endedAt?: number
   ms?: number
   tokens?: number

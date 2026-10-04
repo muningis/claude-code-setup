@@ -4,6 +4,38 @@ import type { DenActor, DenPlan, DenPlanRow, DenRole } from '../types'
 
 const ROLE_NAMES: readonly string[] = ['spec', 'implement', 'visual', 'review-arch', 'review-break']
 
+/** An agent with no tool call for this long is waiting, not working (an idle teammate). */
+export const STALE_MS = 120_000
+
+/**
+ * Squares the den's working agents with the engine's list: an agent the engine
+ * stopped, finished or lost (TaskStop fires no turn end) is done; one quiet past
+ * STALE_MS is idle until its next tool call. Returns the actors, or the same
+ * array when nothing changed.
+ */
+export function reconcile(
+  actors: readonly DenActor[],
+  engine: readonly { id: string; status: string }[],
+  now: number,
+): readonly DenActor[] {
+  let changed = false
+  const next = actors.map(a => {
+    if (a.kind !== 'agent' || a.status !== 'working') return a
+    const info = engine.find(x => x.id === a.id)
+    if (info && info.status !== 'running') {
+      changed = true
+      const failed = info.status === 'failed'
+      return { ...a, status: failed ? ('failed' as const) : ('done' as const), endedAt: now, tool: undefined, activity: info.status === 'killed' ? 'stopped' : failed ? 'failed' : 'done' }
+    }
+    if (now - (a.seenAt ?? a.bornAt) > STALE_MS) {
+      changed = true
+      return { ...a, status: 'idle' as const, tool: undefined, activity: 'waiting' }
+    }
+    return a
+  })
+  return changed ? next : actors
+}
+
 export function roleOf(type: string): DenRole | undefined {
   const m = /^ratchet:(.+)$/.exec(type)
   return m && ROLE_NAMES.includes(m[1]!) ? (m[1] as DenRole) : undefined

@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { gateOf, parsePlan, roleOf, summarize, trackLine, verdictOf } from './logic'
+import { gateOf, parsePlan, reconcile, roleOf, STALE_MS, summarize, trackLine, verdictOf } from './logic'
 import { compose, hyperCast, pack, ROWS } from './scene'
 
 const PANE = {
@@ -91,6 +91,29 @@ describe('reading events', () => {
     const arch = (endedAt: number) => look('a', 'ratchet:review-arch', 'done', { endedAt })
     expect(hyperCast({ now, actors: [arch(now - 1000)] }).crew).toEqual(['review-arch'])
     expect(hyperCast({ now, actors: [arch(now - 60_000)] }).crew).toEqual([])
+  })
+
+  test("agents the engine stopped, or that went quiet, stop being drawn as working", () => {
+    const now = 1_000_000
+    const a = (id: string, seenAgo = 1000) => ({
+      id, kind: 'agent' as const, type: 'ratchet:spec', role: 'spec' as const, label: 'spec',
+      status: 'working' as const, activity: 'x', bornAt: 0, seenAt: now - seenAgo,
+    })
+    const out = reconcile(
+      [a('killed'), a('done'), a('live'), a('quiet', STALE_MS + 1), a('unknown')],
+      [{ id: 'killed', status: 'killed' }, { id: 'done', status: 'completed' }, { id: 'live', status: 'running' }, { id: 'quiet', status: 'running' }],
+      now,
+    )
+    expect(out.map(x => [x.id, x.status, x.activity])).toEqual([
+      ['killed', 'done', 'stopped'],
+      ['done', 'done', 'done'],
+      ['live', 'working', 'x'],
+      ['quiet', 'idle', 'waiting'],
+      ['unknown', 'working', 'x'],
+    ])
+    expect(out[0]?.endedAt).toBe(now)
+    const calm = [a('live')]
+    expect(reconcile(calm, [{ id: 'live', status: 'running' }], now)).toBe(calm) // unchanged: same array
   })
 
   test('frames pack to exactly columns × rows cells', () => {

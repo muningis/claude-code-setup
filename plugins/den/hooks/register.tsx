@@ -10,6 +10,7 @@ import {
   iconOf,
   kTok,
   parsePlan,
+  reconcile,
   roleOf,
   statusText,
   summarize,
@@ -115,6 +116,7 @@ async function addAgent($: $, id: string, type: string, description: string) {
     status: 'working',
     activity: clip(description || 'starting…'),
     bornAt: now,
+    seenAt: now,
   }
   // One raccoon per ratchet role: a fresh spawn takes over the finished one's station.
   await update($, actors, list => [
@@ -133,11 +135,12 @@ async function touchAgent($: $, id: string, p: Partial<DenActor>) {
     if (!info) return // a workflow's or the engine's own loop: not ours to draw
     await addAgent($, id, info.type, info.description)
   }
+  const now = await $.clock.now()
   await update($, actors, list =>
     list.map(a => {
       if (a.id !== id) return a
       const { endedAt: _gone, ...rest } = a
-      return { ...rest, ...p, status: 'working' as const }
+      return { ...rest, ...p, status: 'working' as const, seenAt: now }
     }),
   )
 }
@@ -210,6 +213,12 @@ async function ratchetBash($: $, cmd: string, out: string) {
 }
 
 async function housekeeping($: $, now: number, md: DenMode) {
+  // The demo's actors aren't the engine's: leave them to its timeline.
+  if (!demoTimers.length) {
+    const before = await read($, actors)
+    const after = reconcile(before, await $.agent.list(), now)
+    if (after !== before) await update($, actors, () => [...after])
+  }
   const list = await read($, actors)
   const keep = list.filter(
     a => a.kind === 'main' || a.role || a.status === 'working' || a.endedAt === undefined || now - a.endedAt < GONE_MS,
