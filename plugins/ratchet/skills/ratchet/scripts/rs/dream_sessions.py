@@ -170,9 +170,10 @@ def norm_head(text):
 
 
 def chore_key(text):
-    """A short, normalised request, or None when it is too long or only an acknowledgement."""
+    """A short, normalised request, or None when it is too long, only an acknowledgement, or a
+    slash command: a command that repeats (`/effort max`) is use of a tool, not a chore."""
     norm = " ".join(re.sub(r"[^a-z0-9/ ]+", " ", text.lower()).split())
-    if not norm or len(norm) > CHORE_LEN or norm.replace(" ", "-") in TRIVIAL:
+    if not norm or norm.startswith("/") or len(norm) > CHORE_LEN or norm.replace(" ", "-") in TRIVIAL:
         return None
     return norm
 
