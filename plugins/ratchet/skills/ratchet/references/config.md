@@ -1,100 +1,144 @@
-# `.claude/ratchet/config.json`
+# `.claude/ratchet/config.json`, version 2
 
-Written once per repo, in Part A, after the plan is approved.
+Ratchet writes this file once per repo, after you approve the first plan. It is meant to
+be committed.
 
 ```json
 {
-  "version": 1,
-  "maxRounds": 3,
-  "maxDiffLines": 600,
-  "autoAfter": 2,
-  "relay": true,
+  "version": 2,
   "behavior": {
     "one": "bun test {files}",
     "all": "bun test",
-    "extra": ["bun run check-types", "bun run lint"]
+    "timeout": 900,
+    "failureKinds": {}
   },
-  "visual": {
-    "mode": "render",
-    "capture": "bun scripts/ratchet-capture.tsx {target} {viewport} {out}",
-    "reference": { "kind": "command", "capture": "bun scripts/ratchet-capture.tsx --legacy {target} {viewport} {out}" },
-    "viewports": [375, 1280]
-  },
-  "architecture": ".claude/ratchet/architecture.md",
-  "models": {}
+  "checks": [
+    { "id": "types", "kind": "command", "run": "bun run check-types",
+      "when": ["**/*.ts", "**/*.tsx"], "gate": ["b1", "evidence", "verify"], "timeout": 300 },
+    { "id": "lint", "kind": "command", "run": "bun run lint", "gate": ["b1", "verify"] },
+    { "id": "keyboard", "kind": "device", "when": ["mobile/**"],
+      "instruct": "Open each text field on a phone. The keyboard must not cover it." }
+  ],
+  "tests": { "globs": ["**/*.test.ts", "**/test/**"], "perRequirement": 3, "perCheckpoint": 20 },
+  "size": { "prodLines": 400 },
+  "visual": null,
+  "review": { "proofTimeout": 120, "archPaths": [] },
+  "caps": { "b1": 5, "b2": 3, "b3": 3 },
+  "autoAfter": 2,
+  "models": {},
+  "standing": { "commit": "ask", "afterLock": [], "notify": true },
+  "docs": { "root": "docs", "ste": "lite" },
+  "relay": true,
+  "dream": { "nightly": false, "maxItems": 3, "budgetUsd": 2 }
 }
 ```
 
 | Key | Meaning |
-| --- | ------- |
-| `maxRounds` | Fix rounds per gate per checkpoint. When they run out, the row is `blocked`. |
-| `maxDiffLines` | The size guard. A checkpoint whose `RS size` exceeds this is too big to review: split it instead. |
-| `autoAfter` | `--auto` still holds the human gate on each checkpoint until this many rows of the plan are human-`approved`. `0` trusts `--auto` from cp1. |
-| `relay` | Reset the context to a minimal baton after each checkpoint (needs ratchet's relay mod). `false` keeps one context for the whole run. |
-| `behavior.one` | Runs only the given spec files. `{files}` is a space-separated list of shell-quoted, repo-root-relative paths. |
-| `behavior.all`, `behavior.extra` | The full suite, then cheap static checks (types, lint). Each must exit 0, or fail only where the baseline already did. |
-| `visual` | `null` for products without a UI; gate 2 then reads `n/a`. Otherwise, see below. |
-| `architecture` | The standard both reviewers judge against. Part A drafts it when the repo has none. |
-| `models` | Optional per-role model overrides, passed as the Agent `model:` parameter: `spec`, `implement`, `visual`, `reviewArch`, `reviewBreak`. Empty means each agent's own default; `review-break` defaults to Opus. |
+| --- | --- |
+| `behavior.one` | Runs only the given test files. `{files}` is a list of shell-quoted paths, relative to the repo root. |
+| `behavior.all` | Runs the full suite. |
+| `behavior.timeout` | Seconds before `RS exec` stops a behavior command. |
+| `behavior.failureKinds` | Optional regex lists that replace the defaults in `RS red-check`: `compile`, `stub`, `assert`. |
+| `checks` | The checks for each gate. Each check has the fields in the next table. |
+| `tests.globs` | Which changed files are tests. Other spec files are stubs. |
+| `tests.perRequirement`, `tests.perCheckpoint` | The test budget. A spec over budget needs a reason. The net test delta through B3 is shown at B4. |
+| `size.prodLines` | The production-line estimate that a row uses when it has no `est`. The size check is advisory. |
+| `visual` | `null` for a product with no UI. Then gate 2 reads `n/a`. See below. |
+| `review.proofTimeout` | Seconds for each `RS prove` run. |
+| `review.archPaths` | Globs whose change makes a round structural. Then the architecture reviewer runs again. |
+| `caps` | The rounds for each gate. Then the row needs a decision from you. |
+| `autoAfter` | `--auto` keeps the human gate until this many rows are `approved`. `approved-unverified` rows do not count. |
+| `models` | Optional model per role: `spec`, `implement`, `implementEscalate`, `visual`, `reviewArch`, `reviewBreak`, `relay`. |
+| `standing.commit` | `ask`, `each` or `batch`. Ratchet asks you once, then keeps your answer. |
+| `standing.afterLock` | Commands to run after each lock, for example an install or a server restart. |
+| `standing.notify` | Send a push notification at B4, at a block and at an escalation. |
+| `docs.root` | Where the change documents go. |
+| `docs.ste` | `lite` (length rules block, style rules warn), `full` (all rules warn and length rules block) or `off`. |
+| `relay` | Reset the context after each checkpoint. This needs ratchet's relay mod. |
+| `dream` | The nightly learning loop. See `dream.md`. |
+
+## Checks
+
+| Field | Meaning |
+| --- | --- |
+| `id` | A unique name. |
+| `kind` | `command` runs `run`. `review` gives a rule to the architecture reviewer. `manual` and `device` give an instruction to you at B4. `smoke` runs `run` before B4. |
+| `run`, `rule`, `instruct` | The command, the rule or the instruction. |
+| `when` | Globs. The check applies only when a changed file matches. When there are no globs, the check always applies. |
+| `gate` | Where a `command` check runs: `b1`, `evidence` (its output goes to the reviewers) and `verify`. The default is `["b1", "verify"]`. |
+| `timeout` | Seconds. The default is `behavior.timeout`. |
+
+## Migration
+
+Ratchet reads older files and writes version 2 when you approve the next plan:
+
+| Old | New |
+| --- | --- |
+| `maxRounds` | each value in `caps` |
+| `maxDiffLines` | `size.prodLines`, as advice only |
+| `behavior.extra[]` | `checks[]` with `kind: command` and `gate: ["b1", "verify"]` |
+| `architecture` | `docs.root/architecture.md`. The old path still works. |
+| `.claude/rinse.json` | its checks join `checks[]` |
+| `.claude/sniff.json` | `fix.logs` (see `fix.md`) |
 
 ## `visual`
 
-Gate 2 compares **image files**: `ratchet:visual` can only read files. Every capture
-must therefore write a PNG to disk.
+Gate 2 compares image files, because `ratchet:visual` can only read files. Each capture
+writes a PNG to disk.
 
-| `mode` | How the capture is made | When |
-| ------ | ----------------------- | ---- |
-| `render` | `capture` renders `{target}` headless to `{out}` | the UI renders without a running app |
-| `browser` | `capture` drives a real browser to `{url}`, puts it in `{target}`'s state, and screenshots to `{out}` | the state needs a running app, real data or interaction |
+```json
+{
+  "mode": "render",
+  "capture": "bun scripts/capture.tsx {target} {viewport} {out}",
+  "reference": { "kind": "command", "capture": "bun scripts/capture.tsx --legacy {target} {viewport} {out}" },
+  "viewports": [375, 1280],
+  "tolerance": { "px": 4, "color": 8 }
+}
+```
 
-Placeholders:
+| `mode` | How the capture is made |
+| --- | --- |
+| `render` | `capture` renders `{target}` headless to `{out}`. Use this when the UI renders without a running app. |
+| `browser` | `capture` drives a real browser to `{url}`, sets the state of `{target}`, and saves a screenshot to `{out}`. Use this when the state needs a running app, real data or interaction. |
 
 | Placeholder | Meaning |
-| ----------- | ------- |
-| `{target}` | the row's `target` (a `[a-z0-9-]` name the script maps to a route, story or state) |
-| `{viewport}` | one width from `viewports`; capture runs once per width |
-| `{out}` | an absolute PNG path |
-| `{url}` | browser mode only: `visual.url` for the implementation, the reference URL for the reference |
+| --- | --- |
+| `{target}` | The row's `target`. The script maps it to a route, a story or a state. |
+| `{viewport}` | One width from `viewports`. The capture runs once for each width. |
+| `{out}` | An absolute PNG path. |
+| `{url}` | Browser mode only: `visual.url` for the implementation, or the reference URL. |
 
-**Browser mode** adds these keys:
-- `"url": "http://localhost:5173"`
-- `"setup": "bun run dev"` (optional)
-- `"ready"` (optional): a URL or command to poll. Defaults to `url`.
-- `"teardown"` (optional). Defaults to killing the `setup` process.
+**Tolerance.** The visual agent reports each difference with a numeric delta. The engine
+applies `tolerance`:
+- `missing`, `extra` and `text` differences always block.
+- Other differences block only when the delta is above `tolerance.px` or
+  `tolerance.color`.
+- A difference that the agent marks `engine: true` never blocks. Such a difference
+  comes from a different render engine, for example font metrics or anti-aliasing.
 
-The dev server's lifecycle:
-1. **Before `setup`:** if `url` already answers, something else holds the port. It could
-   be a stale server serving old code. Stop and ask; don't capture against it.
-2. Start `setup` in the background (Bash `run_in_background`).
-3. Poll `ready` for up to 60 s. If it never answers, that's `error`.
-4. Restart it after each fix round, unless it hot-reloads.
-5. Tear it down when the checkpoint leaves B2 or the run stops.
-
-**Tooling.** For "render the JSX", the most faithful approach is mounting the real
-component in Playwright: Playwright CT, or a Storybook story URL. satori + resvg needs no
-browser, but it supports only a CSS subset. That's fine for simple components and
-misleading for complex layouts.
-
-If the capture script doesn't exist yet, building it is the plan's `cp0`. Use
-claude-in-chrome there to work out how to reach each state, then write those steps into
-the script. Gate 2 always runs the script; a screenshot that lives only in your context
-isn't evidence.
-
-**Determinism.** The capture must freeze everything that varies between runs: data, the
-clock, randomness, animations and transitions, the caret. Fonts must load before the
-shot.
-
-Before the first real use, capture one target twice and `cmp -s` the two files.
-- **Byte-identical:** the script is deterministic. This is what makes the cheap paths in
-  gate 2 work: skipping the agent on identical captures, and the regression sweep.
-- **Not identical:** compare the two captures with `ratchet:visual`. Any finding means
-  the script is flaky. Fix it before gate 2 counts.
-
-### `reference`: the oracle
+**Reference kinds.**
 
 | `kind` | Where the reference image comes from |
-| ------ | ------------------------------------ |
-| `url` | `capture` run with `{url}` = `reference.url`, e.g. a live legacy app, as in Helix |
-| `command` | its own `capture` command, same placeholders; it renders the old implementation |
-| `dir` | `<path>/<target>@<viewport>.png`: designs or mockups exported to files |
-| `none` | there's no image. `ratchet:visual` judges against the checkpoint's expectation and the design rules in `architecture.md`, and returns `"oracle": "none"`. That's a weaker gate; the plan should say so. |
+| --- | --- |
+| `url` | `capture` with `{url}` set to `reference.url`, for example a live legacy app. |
+| `command` | Its own `capture` command, which renders the old implementation. |
+| `dir` | `<path>/<target>@<viewport>.png`: designs or mockups that you exported. |
+| `none` | No image. The agent judges against the row's expectation and the design rules. This gate is weaker, and the plan must say so. |
+
+**Browser mode** adds `url`, an optional `setup` command (for example `bun run dev`), an
+optional `ready` URL or command, and an optional `teardown`.
+1. Before `setup`, check `url`. If it already answers, stop and ask. A stale server can
+   serve old code.
+2. Start `setup` in the background.
+3. Poll `ready` for up to 60 seconds. If it does not answer, the gate result is `error`.
+4. Restart the server after each fix round, unless it reloads by itself.
+5. Stop the server when the checkpoint leaves B2 or the run stops.
+
+**Determinism.** The capture must freeze data, the clock, randomness, animations,
+transitions and the caret. Fonts must load before the capture. Before the first real
+use, capture one target two times and compare the files with `cmp -s`. When the files
+differ, fix the script before gate 2 counts.
+
+**Regression.** The engine captures each earlier approved target again. It compares the
+new capture with the last approved capture of the same engine. Only these same-engine
+comparisons use exact goldens.
