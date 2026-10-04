@@ -114,8 +114,8 @@ Then call ExitPlanMode. The human approves or edits.
 2. Write `config.json` version 2, when it is new or migrated.
 3. When `docs.root/architecture.md` does not exist, write it. Use the default rules from
    `docs.md`, plus the rules that you found in the repo.
-4. Write `.claude/ratchet/.gitignore` with `evidence/`, `live.json`, `metrics.jsonl` and
-   `dreams/`.
+4. Write `.claude/ratchet/.gitignore` with `evidence/`, `live.json`, `metrics.jsonl`,
+   `dreams/` and `engine.js`.
 5. For each change document, set `status: approved` and run `RS doclint --approve <file>`.
 6. Add the change to `docs/changes/index.md`.
 7. Run `RS dream register`, so that the nightly dream can read this repo. It runs only
