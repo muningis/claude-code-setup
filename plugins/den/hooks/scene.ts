@@ -105,8 +105,6 @@ export const ROLE_COLOR: Record<Role, number> = {
 }
 const dim = (c: number) => ((c >> 1) & 0x7f7f7f) + 0x101010
 
-const DIM = new Map(Object.values(C).map(c => [c!, dim(c!)] as [number, number]))
-
 const BANG = S.sprite(['R', 'R', 'R', '.', 'R'])
 const CHECK = S.sprite(['....N', '...N.', 'N.N..', '.N...'])
 const FLASH = new Map<number, number>([
@@ -236,16 +234,11 @@ function hyper(c: Canvas, m: SceneModel, f: number) {
     c.dot(x, H - 1, C.K!)
   }
 
-  // The crew at their stations, left to right; an empty station keeps its prop.
+  // The crew at their stations, left to right; a station shows only while manned.
   const cast = hyperCast(m)
   ROLES.forEach((role, i) => {
     const x = i * 9
-    if (!cast.crew.includes(role)) {
-      const base = i % 2 ? 7 : 3
-      c.hline(x + 1, base + 11, 8, dim(ROLE_COLOR[role]))
-      c.put(ROLE_PROP[role][0]!, x + 5, base + 6, { map: DIM })
-      return
-    }
+    if (!cast.crew.includes(role)) return
     const a = [...m.actors].reverse().find(x => x.role === role)
     const status = a?.status ?? 'idle'
     const on = status === 'working'

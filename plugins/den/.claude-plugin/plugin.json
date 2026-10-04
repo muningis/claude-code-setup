@@ -1,6 +1,6 @@
 {
   "name": "den",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pixel-art raccoons act out what Claude and its subagents are doing, in a docked pane; during a ratchet run the den goes full frenzy.",
   "author": { "name": "muningis", "email": "rokas@muningis.lt" },
   "license": "MIT",
