@@ -5,6 +5,7 @@ import {
   implementModel,
   makeNonce,
   parseArgs,
+  parseRelay,
   resolveCaps,
   skipArch,
   stagesFrom,
@@ -74,6 +75,18 @@ describe("relay nonce", () => {
     expect(verifyRelay(null, nonce).ok).toBe(false);
     // The state command takes no nonce, so there is nothing to compare.
     expect(verifyRelay({ ok: true, nonce: null }, null).ok).toBe(true);
+  });
+
+  test("the relay's text is parsed whole: every field survives, and noise or a second object is handled", () => {
+    const state = { ok: true, nonce: "n-1", slug: "s", cp: "cp2", stage: "B1", epoch: 3, rounds: { b1: 2 } };
+    expect(parseRelay({ raw: JSON.stringify(state) })).toEqual({ ok: true, value: state });
+    expect(parseRelay({ raw: `exit 1\n${JSON.stringify(state)}\n` })).toEqual({ ok: true, value: state });
+    // Two objects: the span from the first "{" to the last "}" is not JSON, so the last line wins.
+    expect(parseRelay({ raw: `{"ok": false}\n${JSON.stringify(state)}` })).toEqual({ ok: true, value: state });
+    expect(parseRelay({ raw: "[1, 2]" }).ok).toBe(false);
+    expect(parseRelay({ raw: "" })).toEqual({ ok: false, reason: "The relay returned no text." });
+    expect(parseRelay({ ok: true, nonce: "n-1" })).toEqual({ ok: false, reason: "The relay returned no text." });
+    expect(parseRelay(null).ok).toBe(false);
   });
 });
 

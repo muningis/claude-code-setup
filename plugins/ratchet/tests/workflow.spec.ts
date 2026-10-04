@@ -43,6 +43,20 @@ function parseMeta(text: string): { phases: { title: string }[] } {
   return new Function(`return (${literal[1]})`)();
 }
 
+// The Workflow runtime keeps only the properties that a schema declares, at every level, even
+// with additionalProperties: true. The fake does the same, so a field that the engine reads
+// but no schema declares goes missing here as it does in a live run.
+function strip(schema: any, value: any): any {
+  if (!schema || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return schema.items ? value.map((v) => strip(schema.items, v)) : value;
+  if (!schema.properties) return value;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(schema.properties)) {
+    if (key in value) out[key] = strip(schema.properties[key], value[key]);
+  }
+  return out;
+}
+
 // Scripts the replies of the relay (by command) and of the other agents (by agentType).
 // An unscripted call throws, which the engine reports as a harness error.
 async function dryRun(script: Script, args: Record<string, any> = ARGS) {
@@ -57,7 +71,7 @@ async function dryRun(script: Script, args: Record<string, any> = ARGS) {
     const call: Call = { type: opts.agentType, name: opts.agentType, nonce: null, round: null, prompt, opts };
     if (opts.agentType !== "ratchet:relay") {
       calls.push(call);
-      return reply(script.agents?.[opts.agentType], call);
+      return strip(opts.schema, reply(script.agents?.[opts.agentType], call));
     }
     const line = prompt.split("\n").find((l) => l.startsWith(args.rs));
     const words = line!.slice(args.rs.length).trim().split(/\s+/);
@@ -69,7 +83,11 @@ async function dryRun(script: Script, args: Record<string, any> = ARGS) {
     const source = gate ? script.gates?.[gate] : words[0] === "wait" ? script.wait : script.state;
     const body = reply(source, call);
     if (body === null) return null;
-    return { ok: true, cmd: call.name, nonce: call.nonce, verdict: "pass", summary: "", ...body };
+    const printed = { ok: true, cmd: call.name, nonce: call.nonce, verdict: "pass", summary: "", ...body };
+    // A script can give the relay's text itself. Else the relay copies what RS printed, and a
+    // relay that also returns the fields loses them to the runtime.
+    const raw = typeof body.raw === "string" ? body.raw : JSON.stringify(printed);
+    return strip(opts.schema, { ...printed, raw });
   };
   const parallel = (thunks: Array<() => Promise<unknown>>) => Promise.all(thunks.map((t) => t().catch(() => null)));
 
@@ -243,6 +261,17 @@ describe("checkpoint workflow", () => {
     expect(result.status).toBe("harness-error");
     expect(result.summary).toContain("Nonce mismatch");
     expect(calls.map((c) => c.name)).toEqual(["state", "gate b0-prep", "ratchet:spec", "gate b0"]);
+  });
+
+  test("a relay text with no JSON object is a harness error; text around the object is fine", async () => {
+    const broken = await dryRun({ state: { raw: "bash: ratchet.sh: No such file or directory" } });
+    expect(broken.result.status).toBe("harness-error");
+    expect(broken.result.summary).toContain("Relay state failed. The relay text holds no JSON object: bash: ratchet.sh");
+
+    const noisy = await dryRun({
+      state: (call) => ({ raw: `Output:\n${JSON.stringify({ ok: true, nonce: call.nonce, ...stateAt("B4") })}\nDone.` }),
+    });
+    expect(noisy.result).toMatchObject({ status: "ready-for-B4", summary: "The checkpoint already passed B3." });
   });
 
   test("B3 round 2 skips the arch reviewer when the delta is not structural", async () => {

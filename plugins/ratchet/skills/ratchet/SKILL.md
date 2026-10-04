@@ -58,8 +58,8 @@ as `references/dream.md` says in "Review". Then continue with the request. Skip 
 10. **Keep the lead thin.** The engine runs gates B0 to B3. Read `RS` summaries. Open an
     evidence file only when you must decide something.
 
-`RS` = `bash ${CLAUDE_SKILL_DIR}/scripts/ratchet.sh`. The engine is the workflow
-script `${CLAUDE_SKILL_DIR}/../../workflows/checkpoint.js`.
+`RS` = `bash ${CLAUDE_SKILL_DIR}/scripts/ratchet.sh`. The engine is the plugin
+workflow `ratchet:checkpoint`, from `${CLAUDE_SKILL_DIR}/../../workflows/checkpoint.js`.
 
 ## State at invocation
 

@@ -31,12 +31,17 @@ only when you must decide.
 
 1. Make a nonce: `uuidgen`.
 2. Call the Workflow tool with:
-   - `scriptPath`: `${CLAUDE_SKILL_DIR}/../../workflows/checkpoint.js`, as an absolute
-     path.
+   - `name`: `ratchet:checkpoint`. The plugin ships the engine as a workflow, so no path
+     is necessary. The first launch in a project asks the human. "Don't ask again" then
+     covers the later runs.
    - `args`: `{ repo, slug, cp, epoch, nonce, rs, mode, caps, models }`. `repo` is the
      absolute repo root. `epoch` comes from `RS state`. `rs` is the full `RS` command.
      `mode` is `auto` under an earned `--auto`, else `interactive`. `caps` and `models`
      come from the config.
+   - When the tool does not know the name, launch a copy with `scriptPath`. The tool runs
+     only a script that the session can read, and the plugin folder is outside the repo.
+     Copy the engine before each launch, so that the copy is never stale:
+     `cp ${CLAUDE_SKILL_DIR}/../../workflows/checkpoint.js .claude/ratchet/engine.js`.
 3. Wait for the result. Do not read evidence while the engine runs. The status line shows
    the progress.
 
