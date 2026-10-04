@@ -7,7 +7,7 @@ import cmd_red_check
 import cmd_trace
 import common
 from common import RsError
-from gatekit import Result
+from gatekit import Result, render_results, run_checks
 
 TEXT_CAP = 1000000
 
@@ -27,6 +27,64 @@ def case_names(ctx, tests, texts):
             if common.REQ_ID_RE.search(line):
                 names.append(line.strip()[:160])
     return names
+
+
+def state_files(ctx):
+    """The files that set how the gates judge. They are pinned in the plan's _state dir."""
+    docs_root = ctx.cfg["docs"].get("root") or "docs"
+    cands = [".claude/ratchet/config.json", ".claude/ratchet/learnings.md",
+             docs_root + "/architecture.md", ".claude/ratchet/architecture.md"]
+    if isinstance(ctx.cfg.get("architecture"), str) and ctx.cfg["architecture"]:
+        cands.append(ctx.cfg["architecture"])
+    out = []
+    for c in cands:
+        if c not in out and os.path.isfile(os.path.join(ctx.root, c)):
+            out.append(c)
+    return out
+
+
+def run_prep(ctx):
+    """Gate b0-prep: the base snapshot, the baseline run and the state pins, before the spec agent.
+
+    Gate b0 finds the spec set as the files changed since base, so base must exist first."""
+    root = ctx.root
+    os.makedirs(ctx.ev, exist_ok=True)
+    base = common.resolve_base(root, ctx.slug, ctx.row)
+    created = not base
+    # A resumed checkpoint keeps its base. A new snapshot would hide the work done since.
+    if created:
+        base = common.snap(root, "%s/%s/base" % (ctx.slug, ctx.cp))
+
+    baseline_json = ctx.evp("0-baseline.json")
+    if not os.path.isfile(baseline_json):
+        # Every b1 check runs here, whatever its `when` globs: nothing has changed yet.
+        runs = [c for c in ctx.cfg["checks"] if c["kind"] == "command" and "b1" in c["gate"]]
+        all_cmd = (ctx.cfg["behavior"].get("all") or "").strip()
+        if all_cmd:
+            runs.append({"id": "behavior", "kind": "command", "run": all_cmd, "when": [], "gate": ["b1"]})
+        results = run_checks(ctx, runs) if runs else []
+        common.write_text(ctx.evp("0-baseline.txt"), render_results(results) or "no checks\n")
+        common.write_json(baseline_json, {r["id"]: r["ok"] for r in results})
+    baseline = common.read_json(baseline_json, default={}) or {}
+    failing = sorted(k for k, ok in baseline.items() if ok is False)
+
+    pinned = state_files(ctx)
+    if pinned:
+        listing = ctx.evp(".rs-state.txt")
+        common.write_text(listing, "".join(p + "\n" for p in pinned))
+        rc, out, err = common.rs_run(root, "lock", ".claude/ratchet/evidence/%s/_state" % ctx.slug, "--from", listing)
+        os.remove(listing)
+        if rc != 0:
+            raise RsError("pinning the state files failed: %s" % (err.strip() or out.strip())[:200])
+
+    common.write_json(common.live_path(root), {
+        "active": True, "slug": ctx.slug, "cp": ctx.cp, "gate": "B0", "round": ctx.round,
+        "roles": [], "updated": common.now_iso()})
+
+    summary = "base %s%s; baseline %s" % (base[:7], " (new)" if created else "",
+                                          "clean" if not failing else "already failing: " + ", ".join(failing))
+    return Result("pass", summary, ctx.evp("0-baseline.txt"),
+                  {"base": base, "baselineFailing": failing, "statePins": pinned})
 
 
 def run(ctx):

@@ -107,14 +107,16 @@ describe("checkpoint workflow", () => {
     const { result, calls, phases } = await dryRun({
       state: stateAt("B0"),
       gates: {
+        "b0-prep": { summary: "base abc1234 (new); baseline clean", evidence: `${EV}/0-baseline.txt` },
         b0: { summary: "6 cases", evidence: `${EV}/0-gate.txt` },
         b1: { summary: "12 checks pass", evidence: `${EV}/1-behavior-r1.txt` },
         smoke: { summary: "no smoke checks" },
         "b3-prep": {
           patch: `${EV}/3-patch-r1.diff`,
+          evidence: `${EV}/3-patch-r1.diff`,
           delta: null,
           tripwire: `${EV}/3-tripwire-r1.txt`,
-          evidence: [`${EV}/3-types-r1.txt`],
+          checkOutputs: [`${EV}/3-types-r1.txt`],
           structural: true,
         },
         b3: { summary: "no blocking findings", evidence: `${EV}/3-triage-r1.json` },
@@ -136,16 +138,17 @@ describe("checkpoint workflow", () => {
       summary: "All gates through B3 pass. Rounds: b1 1, b2 0, b3 1.",
       question: null,
       evidence: [
+        `${EV}/0-baseline.txt`,
         `${EV}/0-gate.txt`,
         `${EV}/1-impl-r1.json`,
         `${EV}/1-behavior-r1.txt`,
-        `${EV}/3-types-r1.txt`,
         `${EV}/3-patch-r1.diff`,
         `${EV}/3-triage-r1.json`,
       ],
     });
     expect(calls.map((c) => c.name)).toEqual([
       "state",
+      "gate b0-prep",
       "ratchet:spec",
       "gate b0",
       "ratchet:implement",
@@ -156,7 +159,10 @@ describe("checkpoint workflow", () => {
       "ratchet:review-break",
       "gate b3",
     ]);
-    expect(calls.filter((c) => c.nonce).map((c) => c.nonce)).toEqual(["n1-1", "n1-2", "n1-3", "n1-4", "n1-5", "n1-6"]);
+    expect(calls.filter((c) => c.nonce).map((c) => c.nonce)).toEqual(["n1-1", "n1-2", "n1-3", "n1-4", "n1-5", "n1-6", "n1-7"]);
+    // The reviewers get the check outputs of b3-prep, not its patch twice.
+    const arch = calls.find((c) => c.type === "ratchet:review-arch");
+    expect(arch?.prompt).toContain(`/repo/${EV}/3-types-r1.txt`);
     expect(calls.filter((c) => c.type === "ratchet:relay").every((c) => c.opts.model === "haiku")).toBe(true);
 
     const titles = parseMeta(builtText()).phases.map((p) => p.title);
@@ -208,13 +214,13 @@ describe("checkpoint workflow", () => {
   test("a relay that answers with the wrong nonce is a harness error", async () => {
     const { result, calls } = await dryRun({
       state: stateAt("B0"),
-      gates: { b0: { nonce: "forged-1" } },
+      gates: { "b0-prep": {}, b0: { nonce: "forged-1" } },
       agents: { "ratchet:spec": SPEC_OK },
     });
 
     expect(result.status).toBe("harness-error");
     expect(result.summary).toContain("Nonce mismatch");
-    expect(calls.map((c) => c.name)).toEqual(["state", "ratchet:spec", "gate b0"]);
+    expect(calls.map((c) => c.name)).toEqual(["state", "gate b0-prep", "ratchet:spec", "gate b0"]);
   });
 
   test("B3 round 2 skips the arch reviewer when the delta is not structural", async () => {

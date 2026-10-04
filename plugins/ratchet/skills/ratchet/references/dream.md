@@ -12,10 +12,12 @@ There are two tiers:
 
 ## Run a dream now
 
-1. `RS dream harvest` collects the facts without a model. It reads the metrics, the
-   human gate files (`4-human*.md`), the findings and their triage, the amendments, the
-   learnings counters, and the defects that the human found after the gates passed. It
-   removes secrets. It writes `.claude/ratchet/dreams/<date>/harvest.json`.
+1. `RS dream harvest` collects the facts without a model. It removes secrets. It writes
+   `.claude/ratchet/dreams/<date>/harvest.json`. It reads these sources:
+   - the metrics, and the human gate files (`4-human*.md`)
+   - the findings and their triage, and the amendments
+   - the learnings counters
+   - the defects that the human found after the gates passed
 2. Spawn `ratchet:reflect` with the harvest path, the learnings, the stack library and
    `.claude/ratchet/dreams/rejected.jsonl`. It writes `candidates.json`. It only reads.
 3. `RS dream curate <date>` is code. It removes duplicates and contradictions. It keeps a
@@ -77,7 +79,7 @@ repo in `~/.claude/ratchet/repos.json`. A repo joins that list at its first plan
    that the proposal used.
 4. Reject the proposal when one case goes from pass to fail. Else show the diff and the
    eval table. The human decides.
-5. When the human approves, change the prompt on a branch of the plugin repo, change the
+5. When the human approves, change the prompt on a branch of the plugin repo. Change the
    version, and ask the human to merge.
 
 Dream agents cannot read `evals/`. The guard stops them, so they cannot fit the graders.

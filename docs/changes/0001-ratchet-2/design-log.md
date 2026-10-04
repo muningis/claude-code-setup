@@ -44,13 +44,15 @@ and 7 defects still escaped every gate.
 - **FR-003** (test): If a break finding has no reproduced proof, then the triage shall mark it advisory.
 - **FR-004** (test): If an arch finding cites no existing rule ID, then the triage shall mark it advisory.
 - **FR-005** (test): When a B1 round passes 3, the engine shall use the escalation model.
-- **FR-006** (test): When a pinned test file changes, gate b1 shall restore it and fail.
-- **FR-007** (test): When the spec run shows a compile error, gate b0 shall fail.
+- **FR-006** (test): When a pinned test file changes, the b1 gate shall restore it and fail.
+- **FR-007** (test): When the spec run shows a compile error, the b0 gate shall fail.
 - **FR-008** (test): While a run is active, the guard shall deny destructive git commands from subagents.
 - **FR-009** (test): The stelint check shall block a sentence that has more than 25 words.
-- **FR-010** (test): If an approved document body changes, then doclint shall block it.
+- **FR-010** (test): If an approved document body changes, then the doclint check shall block it.
 - **FR-011** (smoke): When the human runs `/ratchet <goal>`, the plugin shall produce documents and a plan table that pass doclint.
-- **FR-012** (smoke): When a dream runs on recorded evidence, it shall propose 3 items or fewer, each with evidence.
+- **FR-012** (smoke): When a dream runs on recorded evidence, the dream shall propose 3 items or fewer, each with evidence.
+- **FR-013** (test): When a check fails in the baseline and in b1, the b1 gate shall not fail on it.
+- **FR-014** (test): When a state file changes during a run, the b1 gate shall stop with an error and keep the change.
 
 ## Questions and answers
 

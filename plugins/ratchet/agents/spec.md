@@ -44,9 +44,9 @@ The prompt gives you absolute paths to:
 
 - Put tests in new test files only. Pins work for each file.
 - Follow the repo's test location and names.
-- When a test needs code that does not exist yet, write a **stub**: the smallest
-  declaration that compiles, with a body that throws "not implemented" (`TODO()` in
-  Kotlin, `throw new Error("not implemented")` in TypeScript). Stubs let the assertions
+- When a test needs code that does not exist yet, write a **stub**. A stub is the
+  smallest declaration that compiles. Its body throws "not implemented": `TODO()` in
+  Kotlin, `throw new Error("not implemented")` in TypeScript. Stubs let the assertions
   run now. Do not implement behaviour in a stub.
 - When this checkpoint changes behaviour that an earlier test pinned, edit that test and
   add it to `amendments` with the reason.

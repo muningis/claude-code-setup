@@ -108,7 +108,9 @@ a push: `claude --plugin-dir <path to plugins/ratchet>`.
 
 ## Sources
 
-Helix (Shopify), grill-me (Matt Pocock), the design log (Yoav Abrahami, Wix), EARS (Alistair
-Mavin), MADR, ASD-STE100, and the adversarial review patterns of BMAD and
-compound-engineering. ratchet 2.0's own design log is
+- Helix (Shopify) and grill-me (Matt Pocock).
+- The design log (Yoav Abrahami, Wix), EARS (Alistair Mavin), MADR and ASD-STE100.
+- The adversarial review patterns of BMAD and compound-engineering.
+
+ratchet 2.0's own design log is
 `docs/changes/0001-ratchet-2/design-log.md`.

@@ -14,9 +14,27 @@ To change a contract, change this file first. Then change both sides in the same
 | `STATE` | `EV/state.json` |
 | `LIVE` | `R/live.json` |
 | `METRICS` | `R/metrics.jsonl` |
+| `PIN` | `R/evidence/<slug>/_state/`: the pins of the state files |
+| learnings | `R/learnings.md` |
+| goldens | `R/goldens/<target>@<viewport>.png`: the last approved captures |
 | refs | `refs/ratchet/<slug>/<cp>/{base,red,review,gated}` |
 
 All paths in JSON are relative to the repo root, unless a field name ends in `Abs`.
+
+Each `EV` holds the pins of its tests (`spec.lock` and `locked/`) and these files:
+
+| Gate | Files |
+| --- | --- |
+| b0-prep | `0-baseline.txt`, `0-baseline.json` |
+| b0 | `0-spec.json`, `0-red.txt`, `0-amendments.md` |
+| b1, smoke | `1-impl-r<r>.json`, `1-behavior-r<r>.txt`, `1-smoke-r<r>.txt`, `1-brief-r<r>.md`, `1-attempts.md` |
+| b2 | `2-capture-r<r>.json`, the images, `2-visual-r<r>.json`, `2-triage-r<r>.json` |
+| b3 | `3-diff-r<r>.patch`, `3-delta-r<r>.patch`, `3-tripwire-r<r>.txt`, `3-check-<id>-r<r>.txt`, `3-prep-r<r>.json`, `3-arch-r<r>.json`, `3-break-r<r>.json`, `3-triage-r<r>.json`, `proofs/` |
+| human gate | `4-report.md`, `4-human.md`, `4-replay.md`, `decisions.md` |
+
+A list field that would make the output larger than 1 KB is cut. Then a field
+`<name>More` gives the number of items that it leaves out. The evidence file has the full
+list.
 
 ## Plan table, version 2
 
@@ -91,9 +109,12 @@ Each `RS` command that the engine calls prints one JSON object on stdout. The ob
 
 When you do not give `<cp>`, the command uses the first open row.
 
-Fields: `slug`, `cp`, `kind`, `target`, `reqs` (array), `est`, `status`, `stage`,
-`rounds`, `epoch`, `refs` (`base`, `red`, `review`, `gated`: a SHA or null), `pins`
-(`intact`, `changed`), `open`, `visual` (bool), `harnessError` (a string, or absent).
+Fields:
+- the row: `slug`, `cp`, `kind`, `target`, `reqs` (array), `est` and `status`
+- the progress: `stage`, `rounds`, `epoch` and `open`
+- `refs`: `base`, `red`, `review` and `gated`, each a SHA or null
+- `pins`: `intact` and `changed`
+- `visual` (bool), and `harnessError` (a string, or absent)
 
 `ok` is false and `verdict` is `error` when the state cannot be read. `harnessError`
 gives the reason.
@@ -106,6 +127,22 @@ Each gate updates `STATE`, writes its evidence and adds one line to `METRICS`.
 `STATE.rounds.<gate>` to the larger of the old value and `r`. The engine numbers the
 rounds of a gate from `STATE.rounds.<gate> + 1`, so evidence file names never repeat.
 Caps count only the rounds of one engine run. `RS decide` does not reset the rounds.
+
+### `b0-prep`: before the spec agent
+
+The engine runs this gate when it starts a row at `B0`, before the spec agent writes a
+file. Gate `b0` needs the base, because it finds the spec set as the files changed since
+`base`.
+
+1. Snapshot `base`, unless it exists. A resumed row keeps its base.
+2. Run the baseline once: each check with `"b1"` in its `gate` list (whatever its `when`
+   globs), then `behavior.all`. Write `0-baseline.txt` and `0-baseline.json`
+   (`{ "<check id>": true | false }`).
+3. Pin the state files in `PIN`: `config.json`, `learnings.md` and `architecture.md`.
+4. Write `LIVE` with `active: true`.
+
+Added fields: `base`, `baselineFailing` (the checks that failed before the row started),
+`statePins`.
 
 ### `b0`: the spec gate
 
@@ -127,16 +164,24 @@ The verdict is `fail` when `compile`, `runner` or `pass` is above zero, or when
 
 ### `b1`: the behavior gate
 
-1. Run `RS check` on all pins. If a pinned file changed, restore it and fail.
-2. Run each check with `"b1"` in its `gate` list, in order, when a changed file matches
+1. Run `RS check` on the test pins of the plan. If a pinned test changed, restore it and
+   fail.
+2. Run `RS check` on `PIN`. When a state file changed, stop with `error`. Do not restore
+   it: the human decides (see `run.md`).
+3. Run each check with `"b1"` in its `gate` list, in order, when a changed file matches
    its `when` globs. Then run `behavior.all`. Each command runs through `RS exec` with
    its timeout.
-3. Count production lines (`RS size --prod`) and compare them with the row's `est`. This
+4. A check that also failed in the baseline does not fail the gate. It goes into
+   `baselineFailing`. The comparison is for each check, because test names cannot be
+   compared across runners.
+5. Count production lines (`RS size --prod`) and compare them with the row's `est`. This
    result is advisory.
-4. When a check fails, write the brief for the next round to `EV/1-brief-r<r+1>.md`.
+6. When a check fails, write the brief for the next round to `EV/1-brief-r<r+1>.md`.
 
-Added fields: `checks` (`id`, `ok`, `ms`), `failing`, `pinsChanged`, `size` (`prod`,
-`est`, `ratio`), `brief` (the path of the next brief, or null when the gate passes).
+Added fields:
+- `checks` (`id`, `ok`, `ms`), `failing`, `baselineFailing` and `pinsChanged`
+- `size` (`prod`, `est`, `ratio`)
+- `brief`: the path of the next brief, or null when the gate passes
 
 Round 1 has no brief. The implementer reads the design log instead. In a fix round for
 B2 or B3, the brief is the visual file or the triage file.
@@ -146,9 +191,11 @@ B2 or B3, the brief is the visual file or the triage file.
 Run the impl and reference captures for each viewport, with `RS exec`. Then capture each
 earlier approved target again, for the regression check.
 
-Added fields: `images` (a list of `{ viewport, impl, ref }` paths), `identical` (bool:
-each impl and ref pair is byte-identical), `regressChanged` (the targets whose new
-capture differs from their last approved capture).
+Added fields:
+- `images`: a list of `{ viewport, impl, ref }` paths
+- `identical`: true when each impl and ref pair is byte-identical
+- `regressChanged`: the targets whose new capture differs from their last approved
+  capture
 
 - When `identical` is true and `regressChanged` is empty, the verdict is `pass`, and the
   engine skips the visual agent.
@@ -188,9 +235,11 @@ write the patch since the previous `review` snapshot.
 `tripwire`, `checkOutputs` (the paths of the check outputs), `structural` (bool).
 
 `structural` is true when the delta adds or removes a file, or touches a path in
-`review.archPaths`. The engine skips the architecture reviewer in a round when all of
-these are true: the round is 2 or later, `structural` is false, and the last triage had
-no blocking arch finding.
+`review.archPaths`. The engine skips the architecture reviewer in a round when these
+three facts are true:
+- The round is 2 or later.
+- `structural` is false.
+- The last triage had no blocking arch finding.
 
 ### `b3`: triage after review
 
@@ -232,6 +281,8 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 | `RS red-check <output-file>` | Classifies each failure as `assert`, `stub`, `compile` or `runner`, with `behavior.failureKinds` | JSON counts |
 | `RS size --prod <tree>` | Counts the added and deleted lines since `<tree>`. It ignores tests, lockfiles, binaries, generated files and `R/`. | JSON `prod`, `tests` |
 | `RS check <dir>...`, `RS restore <dir>` | Version 1 commands: find changed pinned files, and put them back. They keep their text output. | text |
+| `RS row <slug> <cp> [<status>] [--base <sha>] [--note <text>]` | Changes one row of the plan table, and adds a note line under `## Notes`. Use it instead of a hand edit of the table. | JSON |
+| `RS config` | Prints the config, normalized to version 2. | JSON |
 | `RS exec --timeout <s> -- <cmd>` | Runs `<cmd>` in a shell, and stops it after `<s>` seconds | The exit code of `<cmd>`, or 124 on a timeout |
 | `RS lock <dir> --from <file>` | Pins the paths that `<file>` lists, one path for each line | text |
 | `RS live start <slug> <cp>` | Writes `LIVE` with `active: true` | JSON |
@@ -285,8 +336,8 @@ Each line in `METRICS` is one JSON object:
 ## Agent outputs
 
 The engine passes these schemas to `agent()`. Each agent also writes its JSON output to
-the evidence path that the engine gives it, because `RS` reads the files and the engine
-cannot write files:
+the evidence path that the engine gives it. `RS` reads these files, and the engine cannot
+write files:
 
 | Agent | File |
 | --- | --- |

@@ -26,6 +26,7 @@ class Ctx(object):
         self.ev = common.ev_dir(root, slug, row["id"])
         self._base = None
         self._changed = None
+        self.skip_arch = False
 
     def evp(self, name):
         return os.path.join(self.ev, name)

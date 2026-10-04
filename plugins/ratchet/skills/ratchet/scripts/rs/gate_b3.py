@@ -57,13 +57,11 @@ def run_prep(ctx):
     delta_rel = common.rel(root, delta) if delta else None
     tripwire_rel = common.rel(root, tripwire)
     common.write_json(prep, {"round": r, "patch": patch_rel, "delta": delta_rel, "tripwire": tripwire_rel,
-                             "evidence": ev_paths, "structural": structural})
+                             "checkOutputs": ev_paths, "structural": structural})
     lines = len(common.read_text(patch).splitlines())
     summary = "round %d: patch %d lines; %s" % (r, lines, "full review" if structural else "break review only")
-    res = Result("pass", summary, prep, {"patch": patch_rel, "delta": delta_rel, "tripwire": tripwire_rel,
-                                         "structural": structural})
-    res.evidence_list = ev_paths
-    return res
+    return Result("pass", summary, patch, {"patch": patch_rel, "delta": delta_rel, "tripwire": tripwire_rel,
+                                           "checkOutputs": ev_paths, "structural": structural})
 
 
 def review_path(ctx, role, rnd):
@@ -136,7 +134,10 @@ def run_triage(ctx):
     cfg = ctx.cfg
     r = ctx.round
     prep = common.read_json(ctx.evp("3-prep-r%d.json" % r), default=None)
-    arch_expected = not (isinstance(prep, dict) and prep.get("structural") is False)
+    if ctx.skip_arch:
+        arch_expected = False
+    else:
+        arch_expected = not (isinstance(prep, dict) and prep.get("structural") is False)
     arch = load_review(ctx, "arch", r)
     brk = load_review(ctx, "break", r)
     if brk is None:
@@ -215,8 +216,8 @@ def run_triage(ctx):
         "blocking": blocking, "advisory": advisory, "unproven": unproven,
         "addressed": addressed, "notAddressed": not_addressed})
 
-    extra = {"blocking": blocking, "advisory": advisory, "unproven": unproven,
-             "addressed": addressed, "notAddressed": not_addressed}
+    extra = {"triage": common.rel(root, evidence), "blocking": blocking, "advisory": advisory,
+             "unproven": unproven, "addressed": addressed, "notAddressed": not_addressed}
     if blocking:
         res = Result("fail", "%d blocking (%s); %d advisory" % (len(blocking), ", ".join(blocking), len(advisory)),
                      evidence, extra)

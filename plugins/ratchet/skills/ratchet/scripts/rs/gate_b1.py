@@ -17,8 +17,11 @@ def write_brief(ctx, results, bad, size):
     """The brief for the next implementer round, in EV/1-brief-r<r+1>.md."""
     nxt = ctx.round + 1
     path = ctx.evp("1-brief-r%d.md" % nxt)
-    lines = ["# Round %d brief: %s/%s" % (nxt, ctx.slug, ctx.cp), "",
-             "Gate b1 failed in round %d. Fix what follows. Do not edit pinned spec files." % ctx.round, ""]
+    # A decision from the human (RS decide --reopen) waits at the top of this brief. Keep it.
+    head = common.read_text(path)
+    lines = ([head.rstrip("\n"), ""] if head.strip() else []) + [
+        "# Round %d brief: %s/%s" % (nxt, ctx.slug, ctx.cp), "",
+        "Gate %s failed in round %d. Fix what follows. Do not edit pinned spec files." % (ctx.gate, ctx.round), ""]
     if bad:
         lines += ["## Pinned files changed", "RS restored these files. Do not edit them again:"]
         lines += ["- %s (%s)" % (p, kind) for kind, p, _ in bad]
@@ -35,12 +38,23 @@ def write_brief(ctx, results, bad, size):
     return path
 
 
+def state_dir(ctx):
+    return ".claude/ratchet/evidence/%s/_state" % ctx.slug
+
+
 def run_b1(ctx):
     cfg = ctx.cfg
     ctx.base()
     evidence = ctx.evp("1-behavior-r%d.txt" % ctx.round)
 
-    bad = common.check_pins(ctx.root, common.pin_dirs(ctx.root, ctx.slug))
+    dirs = common.pin_dirs(ctx.root, ctx.slug)
+    # The state files (config, architecture, learnings) change with the human's OK, so a change
+    # is a question for the human, not something to undo. An agent can also weaken a gate there.
+    state_bad = common.check_pins(ctx.root, [d for d in dirs if d == state_dir(ctx)])
+    if state_bad:
+        raise RsError("state files changed: %s; show the diff to the human, then re-lock or restore %s"
+                      % (", ".join(p for _, p, _ in state_bad), state_dir(ctx)))
+    bad = common.check_pins(ctx.root, [d for d in dirs if d != state_dir(ctx)])
     if bad:
         restore_pins(ctx, bad)
         common.write_text(evidence, "pinned files changed and restored:\n"
@@ -62,8 +76,14 @@ def run_b1(ctx):
     common.write_text(evidence, render_results(results))
 
     size, test_lines = size_info(ctx)
-    failing = [r["id"] for r in results if not r["ok"]]
+    # A check that failed before the checkpoint started is not this checkpoint's failure. The
+    # comparison is per check, because test names are not comparable across runners.
+    baseline = common.read_json(ctx.evp("0-baseline.json"), default={}) or {}
+    baseline_failing = [r["id"] for r in results if not r["ok"] and baseline.get(r["id"]) is False]
+    failing = [r["id"] for r in results if not r["ok"] and r["id"] not in baseline_failing]
     shown = "prod %d/%s" % (size["prod"], size["est"] if size["est"] else "-")
+    if baseline_failing:
+        shown += "; failing before the checkpoint: %s" % ", ".join(baseline_failing)
     brief = None
     if failing:
         brief = write_brief(ctx, results, [], size)
@@ -74,7 +94,7 @@ def run_b1(ctx):
         summary = "%d checks pass; %s" % (len(results), shown)
     res = Result(verdict, summary, evidence, {
         "checks": [{"id": r["id"], "ok": r["ok"], "ms": r["ms"]} for r in results],
-        "failing": failing, "pinsChanged": [], "size": size,
+        "failing": failing, "baselineFailing": baseline_failing, "pinsChanged": [], "size": size,
         "brief": common.rel(ctx.root, brief) if brief else None})
     res.round_key = "b1"
     res.advance = "B2" if ctx.has_visual() else "B3"
@@ -84,16 +104,21 @@ def run_b1(ctx):
 
 
 def run_smoke(ctx):
-    evidence = ctx.evp("4-smoke.txt")
+    evidence = ctx.evp("1-smoke-r%d.txt" % ctx.round)
     checks = applicable_checks(ctx, "smoke")
     if not checks:
         common.write_text(evidence, "no smoke checks\n")
-        return Result("pass", "no smoke checks", evidence, {"checks": [], "failing": []})
+        return Result("pass", "no smoke checks", evidence, {"checks": [], "failing": [], "brief": None})
     results = run_checks(ctx, checks)
     common.write_text(evidence, render_results(results))
     failing = [r["id"] for r in results if not r["ok"]]
     verdict = "fail" if failing else "pass"
+    brief = None
+    if failing:
+        # A smoke failure counts as a failed B1 round, so it feeds the same next-round brief.
+        brief = write_brief(ctx, results, [], None)
     summary = ("%d of %d smoke checks fail (%s)" % (len(failing), len(results), ", ".join(failing))
                if failing else "%d smoke checks pass" % len(results))
     return Result(verdict, summary, evidence, {
-        "checks": [{"id": r["id"], "ok": r["ok"], "ms": r["ms"]} for r in results], "failing": failing})
+        "checks": [{"id": r["id"], "ok": r["ok"], "ms": r["ms"]} for r in results], "failing": failing,
+        "brief": common.rel(ctx.root, brief) if brief else None})

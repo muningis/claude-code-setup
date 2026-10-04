@@ -209,7 +209,8 @@ def run_judge(ctx):
     if not isinstance(data, dict):
         raise RsError("2-visual-r%d.json must hold a JSON object" % ctx.round)
     if str(data.get("verdict", "")).upper() == "INVALID":
-        raise RsError("the visual agent judged the image pair INVALID")
+        # The engine matches this prefix to capture again instead of ending the run.
+        raise RsError("invalid capture: the visual agent judged the image pair INVALID")
     tol = ctx.cfg["visual"]["tolerance"]
     blocking = []
     advisory = []
@@ -224,6 +225,10 @@ def run_judge(ctx):
         if d.get("engine") is True:
             cls = "engine"
             engine.append(fid)
+        elif d.get("deferred") is True or d.get("waived") is True:
+            # Outside the row's scope, or covered by a human waiver: shown at B4, never blocking.
+            cls = "advisory"
+            advisory.append(fid)
         elif kind in ("missing", "extra", "text"):
             cls = "blocking"
             blocking.append(fid)
@@ -245,7 +250,7 @@ def run_judge(ctx):
         summary = "%d blocking visual difference(s): %s" % (len(blocking), ", ".join(blocking))
     else:
         summary = "no blocking differences; %d advisory, %d engine" % (len(advisory), len(engine))
-    res = Result(verdict, summary, evidence, {"blocking": blocking, "advisory": advisory, "engine": len(engine)})
+    res = Result(verdict, summary, evidence, {"blocking": blocking, "advisory": advisory, "renderer": len(engine)})
     # Engine-only differences never count toward the round cap.
     res.round_key = None if (engine and not blocking and not advisory) else "b2"
     res.open = merge_open(ctx.state["open"], ("V",), blocking, advisory)

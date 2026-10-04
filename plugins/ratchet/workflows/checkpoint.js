@@ -438,7 +438,7 @@ async function run(cfg) {
     });
   };
   const note = (name, res) => {
-    const paths = [res.evidence, res.patch].flat().filter((p) => typeof p === "string" && p !== "");
+    const paths = unique([res.evidence, res.patch].flat().filter((p) => typeof p === "string" && p !== ""));
     if (paths.length > 0)
       evidence[name] = paths;
   };
@@ -486,6 +486,9 @@ async function run(cfg) {
   };
   const stageB0 = async () => {
     phase(P.b0);
+    const prep = await gate("b0-prep", base.b0 + 1, P.b0);
+    if (!prep.pass)
+      throw stop("harness-error", `The b0-prep gate did not pass. ${sentence(prep.res.summary)}`);
     let retry = null;
     for (let n = 1;n <= SPEC_ROUNDS; n++) {
       const r = base.b0 + n;

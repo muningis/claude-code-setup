@@ -134,11 +134,14 @@ Write each requirement as one list item:
 
 ## ADR: `docs/decisions/NNNN-title-with-dashes.md`
 
-Use MADR 4. The required sections are `## Context and Problem Statement`, `## Considered
-Options` and `## Decision Outcome`. The list directly under `## Considered Options` has
-two or more bullets. The `status` is `proposed`, `accepted`, `rejected`, `deprecated` or
-`superseded by ADR-NNNN`. Lock an accepted ADR with `RS doclint --approve`. Do not edit
-it after that. Write a new ADR that supersedes it.
+Use MADR 4.
+- The required sections are `## Context and Problem Statement`, `## Considered Options`
+  and `## Decision Outcome`.
+- The list directly under `## Considered Options` has two or more bullets.
+- The `status` is `proposed`, `accepted`, `rejected`, `deprecated` or
+  `superseded by ADR-NNNN`.
+- Lock an accepted ADR with `RS doclint --approve`. Do not edit it after that. Write a
+  new ADR that supersedes it.
 
 ## `architecture.md`
 
@@ -153,9 +156,11 @@ outside our control, or code that is not intuitive. A comment never repeats the 
 
 A finding from the architecture reviewer blocks only when it cites a rule ID from this
 file or from `learnings.md`. Ratchet adds these default rules to a new
-`architecture.md`: `ARCH-COMMENTS`, `ARCH-NO-WEAKEN` (no skipped tests or silenced
-checks without a reason), `ARCH-SCOPE` (only the work of the row) and `ARCH-REUSE` (use
-the helper that exists).
+`architecture.md`:
+- `ARCH-COMMENTS`: the rule above.
+- `ARCH-NO-WEAKEN`: no skipped test and no silenced check without a reason.
+- `ARCH-SCOPE`: only the work of the row.
+- `ARCH-REUSE`: use the helper that exists.
 
 ## Writing rules (STE-lite)
 
@@ -173,9 +178,13 @@ licensed.
 | One word has one meaning. Use the same name for the same thing. | review |
 | Do not leave out articles, verbs or subjects. | review |
 
-A procedure step is a numbered list item, an item under a heading that contains the whole
-word `step`, `steps`, `procedure`, `how to`, `install` or `setup`, or a paragraph after
-`<!-- ste: procedural -->`.
+A procedure step is one of these:
+- a numbered list item
+- an item under a heading with the whole word `step`, `steps`, `procedure`, `how to`,
+  `install` or `setup`
+- a paragraph after `<!-- ste: procedural -->`
+
+The 20-word limit applies to each sentence of a step, as in ASD-STE100.
 
 `RS stelint` checks the block and warn rules. It ignores front matter, code, URLs, tables
 and headings. With `docs.ste: off`, it does not run.

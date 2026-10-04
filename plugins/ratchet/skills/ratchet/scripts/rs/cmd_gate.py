@@ -13,6 +13,7 @@ from common import RsError
 from gatekit import Ctx, Result
 
 RUNNERS = {
+    "b0-prep": gate_b0.run_prep,
     "b0": gate_b0.run,
     "b1": gate_b1.run_b1,
     "b2-capture": gate_b2.run_capture,
@@ -22,9 +23,9 @@ RUNNERS = {
     "b3": gate_b3.run_triage,
 }
 # The key of STATE.rounds that the gate counts toward. smoke has none.
-ROUND_KEY = {"b0": "b0", "b1": "b1", "b2-capture": "b2", "b2": "b2", "smoke": None,
+ROUND_KEY = {"b0-prep": None, "b0": "b0", "b1": "b1", "b2-capture": "b2", "b2": "b2", "smoke": None,
              "b3-prep": "b3", "b3": "b3"}
-LIVE_GATE = {"b0": "B0", "b1": "B1", "b2-capture": "B2", "b2": "B2", "smoke": "B4",
+LIVE_GATE = {"b0-prep": "B0", "b0": "B0", "b1": "B1", "b2-capture": "B2", "b2": "B2", "smoke": "B1",
              "b3-prep": "B3", "b3": "B3"}
 
 
@@ -55,7 +56,7 @@ def finish(ctx, res, started):
 def main(argv):
     started = time.time()
     try:
-        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--round"))
+        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--round"), bool_flags=("--skip-arch",))
     except RsError as e:
         return common.emit("gate", "error", str(e), harness_error=str(e))
     nonce = opts.get("--nonce")
@@ -80,6 +81,7 @@ def main(argv):
             key = ROUND_KEY[gate]
             rnd = state["rounds"].get(key, 0) + 1 if key else 1
         ctx = Ctx(root, cfg, slug, plan, row, state, rnd, nonce, gate)
+        ctx.skip_arch = bool(opts.get("--skip-arch"))
         common.live_update(root, slug=slug, cp=row["id"], gate=LIVE_GATE[gate], round=rnd)
         try:
             res = RUNNERS[gate](ctx)

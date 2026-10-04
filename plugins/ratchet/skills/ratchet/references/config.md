@@ -54,7 +54,7 @@ be committed.
 | `standing.afterLock` | Commands to run after each lock, for example an install or a server restart. |
 | `standing.notify` | Send a push notification at B4, at a block and at an escalation. |
 | `docs.root` | Where the change documents go. |
-| `docs.ste` | `lite` (length rules block, style rules warn), `full` (all rules warn and length rules block) or `off`. |
+| `docs.ste` | `lite`: the length rules block and the style rules warn. `full`: the style rules block too, except noun clusters. `off`: no check. |
 | `relay` | Reset the context after each checkpoint. This needs ratchet's relay mod. |
 | `fix.logs` | Where the fix track reads the logs: `{ source, retrieve, errorPattern, config, resolvedAt, notes }`. See `fix.md`. |
 | `dream` | The learning loop: `nightly`, `maxItems`, `budgetUsd`, and `stacks` (the names of the stack libraries of this repo). See `dream.md`. |

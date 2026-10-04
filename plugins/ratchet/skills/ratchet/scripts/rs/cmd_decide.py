@@ -1,4 +1,4 @@
-"""decide <slug> <cp> <text>: record the human's decision and start the next epoch."""
+"""decide <slug> <cp> <text> [--reopen b1|b3]: record the human's decision and start the next epoch."""
 from __future__ import annotations
 
 import os
@@ -7,32 +7,50 @@ import sys
 import common
 from common import RsError
 
+REOPEN = {"b1": "B1", "b3": "B3"}
+
 
 def main(argv):
     try:
-        pos, opts = common.parse_args(argv, value_flags=("--nonce",))
+        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--reopen"))
     except RsError as e:
         return common.emit("decide", "error", str(e), harness_error=str(e))
     nonce = opts.get("--nonce")
 
     def go():
         if len(pos) < 3:
-            raise RsError("usage: decide <slug> <cp> <text>")
+            raise RsError("usage: decide <slug> <cp> <text> [--reopen b1|b3]")
         slug = common.check_name("slug", pos[0])
         cp = common.check_name("cp", pos[1])
         text = " ".join(pos[2:]).strip()
         if not text:
             raise RsError("decide needs the decision text")
+        reopen = opts.get("--reopen")
+        if reopen is not None and reopen not in REOPEN:
+            raise RsError("--reopen takes b1 or b3")
         root = common.repo_root()
         row = common.pick_row(common.load_plan(root, slug), cp)
         state, _ = common.load_state(root, slug, row)
         state["epoch"] += 1
-        path = os.path.join(common.ev_dir(root, slug, cp), "decisions.md")
+        ev = common.ev_dir(root, slug, cp)
+        path = os.path.join(ev, "decisions.md")
         head = "" if os.path.isfile(path) else "# Decisions\n\n"
         common.append_text(path, "%s## %s, epoch %d\n%s\n\n" % (head, common.now_iso(), state["epoch"], text))
+        extra = {"epoch": state["epoch"]}
+        if reopen:
+            state["stage"] = REOPEN[reopen]
+            if reopen == "b1":
+                # The engine gives the next implementer this brief. The gate that fails next keeps
+                # this text at the top when it writes its own part.
+                brief = os.path.join(ev, "1-brief-r%d.md" % (state["rounds"].get("b1", 0) + 1))
+                common.write_text(brief, "## Decision from the human\n%s\n" % text)
+                extra["brief"] = common.rel(root, brief)
+            extra["stage"] = state["stage"]
         common.write_state(root, state)
-        return common.emit("decide", "pass", "decision recorded; epoch %d" % state["epoch"],
-                           evidence=path, nonce=nonce, root=root, extra={"epoch": state["epoch"]})
+        summary = "decision recorded; epoch %d" % state["epoch"]
+        if reopen:
+            summary += "; reopened at %s" % state["stage"]
+        return common.emit("decide", "pass", summary, evidence=path, nonce=nonce, root=root, extra=extra)
 
     return common.run_guarded("decide", nonce, go)
 

@@ -22,9 +22,9 @@ only when you must decide.
 
 - **Config.** With a version 1 config, show the changes from `config.md`, "Migration",
   in 5 lines or fewer. Write version 2 after the human agrees.
-- **Standing orders.** When `standing.commit` is `ask` and the human has not answered
-  in this repo, ask one time: commit after each lock, commit in one batch at the end, or
-  ask each time. Write the answer to `standing.commit`.
+- **Standing orders.** When `standing.commit` is `ask`, and the human did not answer yet
+  in this repo, ask one time. The options are: commit after each lock, commit in one
+  batch at the end, or ask each time. Write the answer to `standing.commit`.
 - **Keep awake.** Run `RS keepawake start`. A Mac that sleeps stops the run.
 
 ## 3. Start the engine
@@ -46,8 +46,8 @@ only when you must decide.
 | --- | --- |
 | `ready-for-B4` | The result is a claim. Run `RS state <slug> <cp>` yourself: `stage` must be `B4`, and `refs.gated` must be set. Then run `RS check .claude/ratchet/evidence/<slug>/*` and `RS changed refs/ratchet/<slug>/<cp>/gated`. Both must be clean. Then go to step 5. |
 | `needs-decision` | Show `question` in 5 lines or fewer. Send a push notification. End your turn. Then run `RS decide <slug> <cp> "<answer>"` and start the engine again. |
-| `blocked` | Set the row status to `blocked`, and add `blocked: <reason>` to the plan notes. Show the reason and the evidence path. Ask what to do. |
-| `harness-error` | Show the reason. Fix the config or the tool with the human. Do not retry without a change. |
+| `blocked` | Run `RS row <slug> <cp> blocked --note "blocked: <reason>"`. Show the reason and the evidence path. Ask what to do. |
+| `harness-error` | Show the reason. Fix the config or the tool with the human. Do not retry without a change. When the reason is "state files changed", show `diff -u` of each file against its copy in `PIN/locked/`. When the human keeps the change, lock `PIN` again. Else run `RS restore` on `PIN`. |
 
 When `RS changed` shows edits after the gates, start the engine again. It runs B1 to B3
 on the new code.
@@ -61,11 +61,11 @@ on the new code.
 
 | Reply | Do |
 | --- | --- |
-| It approves the result ("all good", "works", "approve") | Quote it in `EV/4-human.md`. Set the row to `approved`. Go to step 6. |
-| Only "go", "continue" or "next" | Set the row to `approved-unverified`. Say in one line that you recorded it so. Go to step 6. |
+| It approves the result ("all good", "works", "approve") | Quote it in `EV/4-human.md`. Run `RS row <slug> <cp> approved`. Go to step 6. |
+| Only "go", "continue" or "next" | Run `RS row <slug> <cp> approved-unverified`. Say in one line that you recorded it so. Go to step 6. |
 | It reports a problem, or passes with a "but" | Write one learnings entry (below). Run `RS decide <slug> <cp> "<the problem>" --reopen b1`. Start the engine again. |
-| It accepts a visual difference | Add `waive(<cp>): <difference> — <reason>` to the plan notes. Only the human makes a waiver. |
-| It chooses a variant, or drops the row | Set the row to `superseded`. Run `RS retire` for each of its tests that no longer applies. |
+| It accepts a visual difference | Run `RS row <slug> <cp> --note "waive(<cp>): <difference> — <reason>"`. Only the human makes a waiver. |
+| It chooses a variant, or drops the row | Run `RS row <slug> <cp> superseded`. Run `RS retire` for each of its tests that no longer applies. |
 | It does not address the checkpoint | The row stays open. Say that it waits for the human. |
 
 **A learnings entry** is one rule for future rows, not the one-time fix. Add it to
@@ -95,8 +95,8 @@ Do not add a rule that exists already. Then lock the learnings again with
    - `ask`: ask the human, in one line.
 3. Run each `standing.afterLock` command with `RS exec --timeout 600 -- <command>`. Report a
    failure, but do not undo the lock.
-4. Add a Results entry to the design log (see `docs.md`): the date, the row, the
-   requirements that it verified and each deviation.
+4. Add a Results entry to the design log (see `docs.md`). It gives the date, the row,
+   the verified requirements and each deviation.
 5. Run `RS drop <slug>/<cp>`.
 6. Next row:
    - With `relay` on and rows still `todo` or `red`: run

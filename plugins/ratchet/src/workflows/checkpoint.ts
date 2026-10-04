@@ -27,6 +27,7 @@ import {
   gateCommand,
   gateVerdict,
   ids,
+  unique,
   implementModel,
   INVALID_RECAPTURES,
   isInvalidCapture,
@@ -307,7 +308,8 @@ async function run(cfg: Config): Promise<Result> {
 
   // The result keeps the newest evidence of each gate.
   const note = (name: string, res: any) => {
-    const paths = [res.evidence, res.patch].flat().filter((p) => typeof p === "string" && p !== "");
+    // b3-prep's evidence is its patch, so the two fields can name the same file.
+    const paths = unique([res.evidence, res.patch].flat().filter((p) => typeof p === "string" && p !== ""));
     if (paths.length > 0) evidence[name] = paths;
   };
 
@@ -361,6 +363,10 @@ async function run(cfg: Config): Promise<Result> {
 
   const stageB0 = async () => {
     phase(P.b0);
+    // b0 finds the spec set as the files changed since base, so base must exist before the spec
+    // agent writes anything. b0-prep keeps an existing base and also runs the baseline.
+    const prep = await gate("b0-prep", base.b0 + 1, P.b0);
+    if (!prep.pass) throw stop("harness-error", `The b0-prep gate did not pass. ${sentence(prep.res.summary)}`);
     let retry: { evidence: string | null } | null = null;
     for (let n = 1; n <= SPEC_ROUNDS; n++) {
       const r = base.b0 + n;

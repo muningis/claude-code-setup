@@ -320,7 +320,8 @@ t('b3 in round 2 proves the open findings again and marks a fixed one addressed'
   put(repo, `${EV}/proofs/p1.sh`, 'if grep -q NotImplemented src/greet.sh; then echo "still broken: NotImplemented"; exit 1; fi\n')
   snapBase(repo)
   const prep1 = gate(repo, 'b3-prep')
-  expect(prep1.json).toMatchObject({ verdict: 'pass', structural: true, delta: null, evidence: [] })
+  expect(prep1.json).toMatchObject({ verdict: 'pass', structural: true, delta: null, checkOutputs: [] })
+  expect(prep1.json.evidence).toBe(prep1.json.patch)
   review(repo, 'arch', 1, [])
   review(repo, 'break', 1, [
     { id: 'cp1-B1-1', severity: 'high', issue: 'the stub is still there', proof: { cmd: `sh ${EV}/proofs/p1.sh`, pattern: 'still broken' } },
@@ -408,4 +409,70 @@ t('red-check lets compile win over assert, and failureKinds replace a family', (
   put(repo, 'boom.txt', 'BOOM happened\n')
   expect(rs(repo, 'red-check', 'boom.txt').json.kind).toBe('assert')
   expect(rs(repo, 'red-check', 'assert.txt').json.kind).toBe('runner')
+})
+
+t('b0-prep takes the base only once, records the baseline, pins the state files and starts LIVE', () => {
+  const repo = makeRepo({ config: c => { c.checks = [{ id: 'legacy', kind: 'command', run: 'exit 3', gate: ['b1'] }] } })
+  const first = gate(repo, 'b0-prep')
+  expect(first.json.verdict).toBe('pass')
+  expect(first.json.baselineFailing).toContain('legacy')
+  put(repo, 'src/later.sh', 'echo later\n')
+  expect(gate(repo, 'b0-prep').json.base).toBe(first.json.base)
+  expect(existsSync(join(repo, '.claude/ratchet/evidence/demo/_state/spec.lock'))).toBe(true)
+  const live = JSON.parse(readFileSync(join(repo, '.claude/ratchet/live.json'), 'utf8'))
+  expect(live).toMatchObject({ active: true, slug: 'demo', cp: 'cp1', gate: 'B0' })
+})
+
+t('b1 passes over a check that failed before the checkpoint, and names it', () => {
+  const repo = makeRepo({ config: c => { c.checks = [{ id: 'legacy', kind: 'command', run: 'exit 3', gate: ['b1'] }] } })
+  expect(gate(repo, 'b0-prep').code).toBe(0)
+  addSpec(repo, 'fr001.sh', 'fr002.sh')
+  expect(gate(repo, 'b0').code).toBe(0)
+  implement(repo)
+  expect(gate(repo, 'b1').json).toMatchObject({ verdict: 'pass', failing: [], baselineFailing: ['legacy'] })
+})
+
+t('b1 stops with an error when a state file changed, and leaves the change for the human', () => {
+  const repo = makeRepo()
+  expect(gate(repo, 'b0-prep').code).toBe(0)
+  addSpec(repo, 'fr001.sh', 'fr002.sh')
+  expect(gate(repo, 'b0').code).toBe(0)
+  implement(repo)
+  const path = join(repo, '.claude/ratchet/config.json')
+  const edited = readFileSync(path, 'utf8').replace('"perCheckpoint": 20', '"perCheckpoint": 99')
+  writeFileSync(path, edited)
+  const b1 = gate(repo, 'b1')
+  expect(b1.code).toBe(2)
+  expect(b1.json.summary).toContain('state files changed')
+  expect(readFileSync(path, 'utf8')).toBe(edited)
+})
+
+t('decide --reopen b1 sets the stage and puts the decision in the next brief', () => {
+  const repo = pinnedRepo()
+  const d = rs(repo, 'decide', 'demo', 'cp1', 'Use the cached list.', '--reopen', 'b1')
+  expect(d.json).toMatchObject({ verdict: 'pass', stage: 'B1', brief: `${EV}/1-brief-r1.md` })
+  expect(readFileSync(join(repo, d.json.brief), 'utf8')).toContain('Use the cached list.')
+  expect(rs(repo, 'state', 'demo', 'cp1').json).toMatchObject({ stage: 'B1', epoch: d.json.epoch })
+})
+
+t('row changes the status and adds a note, and the table still parses', () => {
+  const repo = makeRepo()
+  const r = rs(repo, 'row', 'demo', 'cp1', 'blocked', '--note', 'blocked: the API has no paging')
+  expect(r.json).toMatchObject({ verdict: 'pass', changes: { status: 'blocked' } })
+  expect(readFileSync(join(repo, '.claude/ratchet/plans/demo.md'), 'utf8')).toContain('- cp1 · blocked: the API has no paging')
+  expect(rs(repo, 'state', 'demo', 'cp1').json.status).toBe('blocked')
+})
+
+t('learnings --scope keeps the active entries whose scope matches the paths', () => {
+  const repo = makeRepo()
+  const entry = (id: string, scope: string, rule: string, status: string) =>
+    `### ${id}\n- scope: ${scope}\n- rule: ${rule}\n- helpful: 0 · harmful: 0 · status: ${status}\n\n`
+  put(repo, '.claude/ratchet/learnings.md', '# Learnings\n\n'
+    + entry('L-001', 'mobile/**', 'Check the keyboard.', 'active')
+    + entry('L-002', 'server/**', 'Log the request ID.', 'active')
+    + entry('L-003', 'mobile/**', 'An old rule.', 'retired'))
+  const out = sh(repo, ['bash', RS_SH, 'learnings', '--scope', 'mobile/app/Form.kt']).out
+  expect(out).toContain('L-001')
+  expect(out).not.toContain('L-002')
+  expect(out).not.toContain('L-003')
 })

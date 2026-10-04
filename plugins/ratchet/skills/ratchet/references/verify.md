@@ -12,11 +12,12 @@ Use the checks in `.claude/ratchet/config.json` whose `gate` list has `verify`, 
 checks of kind `review`, `manual` and `device`.
 
 - When the config has no such checks, but `.claude/rinse.json` exists, use its checks.
-- When neither exists, find the checks without changes. What CI runs is the best signal.
-  Then the manifest scripts and the tool config. Confirm the set with one
-  AskUserQuestion. Then ask, in plain words, what only a human can check: a layout, a
-  real device, an email that must arrive. Never invent a manual check. Write the result
-  to `checks` in the config.
+- When neither exists, find the checks without changes:
+  1. What CI runs is the best signal. Then read the manifest scripts and the tool config.
+  2. Confirm the set with one AskUserQuestion.
+  3. Ask, in plain words, what only a human can check: a layout, a real device, an email
+     that must arrive. Never invent a manual check.
+  4. Write the result to `checks` in the config.
 - In a clone that the human did not set up, show each `run` command, and confirm one
   time before you run it.
 
