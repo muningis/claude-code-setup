@@ -29,7 +29,8 @@ be committed.
   "standing": { "commit": "ask", "afterLock": [], "notify": true },
   "docs": { "root": "docs", "ste": "lite" },
   "relay": true,
-  "dream": { "nightly": false, "maxItems": 3, "budgetUsd": 2 }
+  "fix": { "logs": null },
+  "dream": { "nightly": false, "maxItems": 3, "budgetUsd": 2, "stacks": [] }
 }
 ```
 
@@ -55,7 +56,8 @@ be committed.
 | `docs.root` | Where the change documents go. |
 | `docs.ste` | `lite` (length rules block, style rules warn), `full` (all rules warn and length rules block) or `off`. |
 | `relay` | Reset the context after each checkpoint. This needs ratchet's relay mod. |
-| `dream` | The nightly learning loop. See `dream.md`. |
+| `fix.logs` | Where the fix track reads the logs: `{ source, retrieve, errorPattern, config, resolvedAt, notes }`. See `fix.md`. |
+| `dream` | The learning loop: `nightly`, `maxItems`, `budgetUsd`, and `stacks` (the names of the stack libraries of this repo). See `dream.md`. |
 
 ## Checks
 

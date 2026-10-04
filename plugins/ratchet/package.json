@@ -1,0 +1,9 @@
+{
+  "name": "ratchet-engine",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun src/build.ts",
+    "test": "bun test tests/engine.spec.ts tests/workflow.spec.ts"
+  }
+}

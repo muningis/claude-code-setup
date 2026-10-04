@@ -53,8 +53,15 @@ Each `RS` command that the engine calls prints one JSON object on stdout. The ob
 }
 ```
 
+- `ok` is true when the command ran, also when the verdict is `fail`. Only `verdict`
+  decides.
 - `verdict` is `pass`, `fail` or `error`.
-- The exit code is 0 for `pass`, 1 for `fail` and 2 for `error`.
+- The exit code is 0 for `pass`, 1 for `fail` and 2 for `error`. Exit codes 1 and 2 are
+  normal results, not crashes.
+- Each command that the engine calls takes `--nonce <n>` and echoes it. This includes
+  `RS state`.
+- A slug and a checkpoint ID match `[A-Za-z0-9][A-Za-z0-9._-]*` and never contain `..`,
+  because they go into shell commands.
 - `error` means that the harness cannot run the gate, for example a missing tool or a bad
   config. It is never a pass.
 - Each command adds its own fields to this object.
@@ -95,6 +102,11 @@ gives the reason.
 
 Each gate updates `STATE`, writes its evidence and adds one line to `METRICS`.
 
+**Rounds.** The engine passes `--round <r>` to each gate. The gate sets
+`STATE.rounds.<gate>` to the larger of the old value and `r`. The engine numbers the
+rounds of a gate from `STATE.rounds.<gate> + 1`, so evidence file names never repeat.
+Caps count only the rounds of one engine run. `RS decide` does not reset the rounds.
+
 ### `b0`: the spec gate
 
 Run this gate after the spec agent returns.
@@ -124,35 +136,47 @@ The verdict is `fail` when `compile`, `runner` or `pass` is above zero, or when
 4. When a check fails, write the brief for the next round to `EV/1-brief-r<r+1>.md`.
 
 Added fields: `checks` (`id`, `ok`, `ms`), `failing`, `pinsChanged`, `size` (`prod`,
-`est`, `ratio`), `brief`.
+`est`, `ratio`), `brief` (the path of the next brief, or null when the gate passes).
+
+Round 1 has no brief. The implementer reads the design log instead. In a fix round for
+B2 or B3, the brief is the visual file or the triage file.
 
 ### `b2-capture`: before the visual judgment
 
 Run the impl and reference captures for each viewport, with `RS exec`. Then capture each
 earlier approved target again, for the regression check.
 
-Added fields: `images` (`impl`, `ref`, `viewport`), `identical` (bool: each impl and ref
-pair is byte-identical), `regressChanged` (the targets whose new capture differs from
-their last approved capture).
+Added fields: `images` (a list of `{ viewport, impl, ref }` paths), `identical` (bool:
+each impl and ref pair is byte-identical), `regressChanged` (the targets whose new
+capture differs from their last approved capture).
 
-When `identical` is true and `regressChanged` is empty, the verdict is `pass`, and the
-engine skips the visual agent.
+- When `identical` is true and `regressChanged` is empty, the verdict is `pass`, and the
+  engine skips the visual agent.
+- A target in `regressChanged` blocks, unless the plan notes have
+  `waive(<cp>): regression <target> — <reason>`. Only the human writes that waiver. The
+  evidence file lists the changed targets, and it is the brief for the fix round.
 
 ### `b2`: after the visual judgment
 
 The gate reads `EV/2-visual-r<r>.json` in the visual schema below. It applies
 `visual.tolerance` (see `config.md`).
 
-Added fields: `blocking`, `advisory`, `engine` (the count of engine differences).
+Added fields: `blocking`, `advisory`, `renderer` (the count of differences that the
+renderer causes).
 
-The verdict is `pass` when `blocking` is empty.
+The verdict is `pass` when `blocking` is empty. When the visual verdict is `INVALID`, the
+verdict is `error` and `summary` starts with `invalid capture`. Then the engine runs
+`b2-capture` again, two times or fewer, and then stops with `harness-error`.
 
-### `smoke`: before the human gate
+### `smoke`: after each green `b1`
 
 Run each check of kind `smoke` whose `when` globs match a changed file. When no smoke
 check applies, the verdict is `pass` and `summary` says `no smoke checks`.
 
-Added fields: `checks` (`id`, `ok`, `ms`), `failing`.
+A smoke failure counts as a failed B1 round. The gate adds the failures to the next brief,
+`EV/1-brief-r<r+1>.md`.
+
+Added fields: `checks` (`id`, `ok`, `ms`), `failing`, `brief`.
 
 ### `b3-prep`: before review
 
@@ -160,17 +184,20 @@ Write the patch since `base`, the tripwire output and the outputs of the checks 
 have `"evidence"` in their `gate` list. Snapshot `review`. In round 2 and later, also
 write the patch since the previous `review` snapshot.
 
-Added fields: `patch`, `delta` (a path or null), `tripwire`, `evidence` (paths),
-`structural` (bool).
+`evidence` is the patch path. Added fields: `patch`, `delta` (a path or null),
+`tripwire`, `checkOutputs` (the paths of the check outputs), `structural` (bool).
 
 `structural` is true when the delta adds or removes a file, or touches a path in
-`review.archPaths`. When it is false in round 2 or later, the engine skips the
-architecture reviewer.
+`review.archPaths`. The engine skips the architecture reviewer in a round when all of
+these are true: the round is 2 or later, `structural` is false, and the last triage had
+no blocking arch finding.
 
 ### `b3`: triage after review
 
 The gate reads `EV/3-arch-r<r>.json` and `EV/3-break-r<r>.json`, in the verdict schema
-below. A missing file for a reviewer that ran is an `error`.
+below. A missing file for a reviewer that ran is an `error`. When the engine skipped the
+architecture reviewer, it passes `--skip-arch`. The gate writes the full triage to
+`EV/3-triage-r<r>.json`.
 
 - A break finding blocks only when its `proof` reproduces (see `RS prove`).
 - An architecture finding blocks only when its `rule` names a rule ID that exists in
@@ -179,7 +206,8 @@ below. A missing file for a reviewer that ran is an `error`.
 - In round 2 and later, the gate runs each open blocking proof again. A proof that does
   not reproduce marks its finding as addressed.
 
-Added fields: `blocking`, `advisory`, `unproven`, `addressed`, `notAddressed`.
+Added fields: `triage` (its path), `blocking`, `advisory`, `unproven`, `addressed`,
+`notAddressed`.
 
 The verdict is `pass` when `blocking` is empty. Then the gate snapshots `gated` and sets
 the stage to `B4`.
@@ -210,8 +238,13 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 | `RS live stop` | Sets `active: false` | JSON |
 | `RS metrics add <json>` | Adds one line to `METRICS` | JSON |
 | `RS report <slug> <cp>` | Writes `EV/4-report.md` | 10 lines of text or fewer, for the human |
-| `RS decide <slug> <cp> <text>` | Adds the human's decision to `EV/decisions.md` and increments `epoch` | JSON |
+| `RS decide <slug> <cp> <text> [--reopen b1\|b3]` | Adds the human's decision to `EV/decisions.md` and increments `epoch`. With `--reopen`, it sets the stage, and the next brief starts with the decision. | JSON |
 | `RS retire <slug> <cp> <path> --reason <text>` | Unpins one test file. It records the reason in `EV/0-amendments.md`. | JSON |
+| `RS keepawake start\|stop` | Starts or stops `caffeinate`, so that the Mac does not sleep during a run. It does nothing on other systems. | JSON |
+| `RS learnings --scope <path>...` | Prints the active learnings entries whose scope matches one of the paths, and the matching stack rules | markdown |
+| `RS stelint <path>...` | Checks the STE-lite rules in `docs.md` | JSON |
+| `RS doclint <path>... [--approval] [--approve <file>]` | Checks the document rules in `docs.md`. `--approve` records the approved body. | JSON |
+| `RS dream <step> ...` | `harvest`, `curate <date>`, `apply <date> ...`, `install`, `uninstall`. See `dream.md`. | JSON |
 
 ## Live file
 
@@ -309,20 +342,39 @@ cannot write files:
 ```json
 { "verdict": "FAIL", "differences": [{
     "id": "cp2-V1-1", "element": "header", "kind": "position",
-    "delta": { "px": 6, "color": 0 }, "engine": false, "severity": "medium",
-    "fixable": true, "location": "top, y 0–50" }] }
+    "delta": { "px": 6, "color": 0 }, "engine": false, "deferred": false,
+    "waived": false, "severity": "medium", "location": "top, y 0-50" }] }
 ```
 
 - `kind` is `position`, `size`, `color`, `missing`, `extra`, `text` or `other`.
-- The engine decides which differences block:
+- The `b2` gate decides which differences block:
   - A `missing`, `extra` or `text` difference blocks.
   - Any other kind blocks only when its delta is above `visual.tolerance`.
-  - A difference with `engine: true` never blocks, and it never counts toward a round.
+  - A difference with `engine: true` comes from the renderer. It never blocks, and it
+    never counts toward a round.
+  - A difference with `deferred: true` (outside the row's scope) or `waived: true` (a
+    human waiver covers it) is advisory.
 
 ### relay
 
 The relay agent returns the `RS` JSON object without change. The engine checks that
 `nonce` matches the value it sent.
+
+## Engine arguments
+
+The lead starts the workflow with these `args`:
+
+```json
+{ "repo": "/abs/repo", "slug": "s", "cp": "cp2", "epoch": 3, "nonce": "<uuid>",
+  "rs": "bash /abs/skill/scripts/ratchet.sh", "mode": "interactive",
+  "caps": { "b1": 5, "b2": 3, "b3": 3 }, "models": {} }
+```
+
+- Use a new `nonce` for each run. A resumed workflow replays cached results for the same
+  prompts, so an old nonce runs no gate again.
+- `epoch` from `STATE` wins over `args.epoch`.
+- `mode` is `interactive` or `auto`. In 2.0 the engine only logs it.
+- From implement round 4, the engine uses `models.implementEscalate` (default `opus`).
 
 ## Engine result
 
@@ -335,4 +387,12 @@ The checkpoint workflow returns one object:
 ```
 
 - `status` is `ready-for-B4`, `needs-decision`, `blocked` or `harness-error`.
-- For `needs-decision`, `question` gives the decision that the human must make.
+- `ready-for-B4`: gates B0 to B3 passed. Also returned at once when the stage is `B4`.
+- `needs-decision`: a cap ran out, or the implementer returned `NEEDS_CONTEXT`,
+  `BLOCKED` or `SPEC_CONFLICT`. `question` gives the decision that the human must make.
+- `blocked`: the spec failed `b0` two times. `question` gives the reason. The lead marks
+  the row `blocked`.
+- `harness-error`: a gate returned `error`, a relay nonce did not match, an agent
+  returned nothing, or the stage is `B5` or `done`.
+- The result is a claim from the workflow. Before the human gate, the lead runs
+  `RS state` itself and checks `stage` `B4` and `refs.gated`.

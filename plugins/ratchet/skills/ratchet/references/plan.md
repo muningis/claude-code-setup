@@ -1,119 +1,117 @@
-# Part A — Plan
+# Plan
 
-**Write nothing to the repo until the user approves in A4**: no config, no architecture,
-no plan. Plan mode only allows edits to the harness plan file, and a rejected cut
-shouldn't leave files behind.
+Planning turns a goal into change documents and a short plan of checkpoints. The human
+approves the plan in plan mode. The run starts after that.
 
-**Git first.** Ratchet needs a git repo, because snapshots, diffs and staging are all
-git. If the session isn't inside one, ask which project, and do it before reading
-anything else. Never `git init` a parent folder.
+**Git first.** Ratchet needs a git repo. When the session is not in one, ask which
+project. Never run `git init` in a parent folder.
 
-## A1 — Config (first run, or `plan --refresh`)
+## 1. Config
 
-Skip this if `.claude/ratchet/config.json` loaded. Otherwise infer what you can,
-read-only:
-- **Tests.** What CI runs is the strongest signal, then manifest scripts and the test
-  runner. If `.claude/rinse.json` exists, take its `command` checks.
-- **UI.** Does the product have one? If so, can a target render headless, or does it
-  need a running app? Is there a reference to compare against: a legacy app, a design
-  export, the old component?
-- **Architecture.** Look for `ARCHITECTURE.md`, `docs/`, the repo's CLAUDE.md
-  conventions. Failing those, read the code.
+When `.claude/ratchet/config.json` exists, use it. A version 1 config gets migrated after
+approval (see `config.md`, "Migration").
 
-Confirm everything with **one** AskUserQuestion covering:
-- the behavior commands
-- the visual mode and reference
-- the source of the architecture
+With no config, find the facts without changes:
+- **Tests.** What CI runs is the best signal. Then the manifest scripts and the test
+  runner. When `.claude/rinse.json` exists, take its checks.
+- **UI.** Does the product have one? Can a target render headless, or does it need a
+  running app? Is there a reference: an old app, a design export, an old component?
+- **Architecture.** Look for `ARCHITECTURE.md`, `docs/` and the conventions in
+  `CLAUDE.md`. When there is nothing, read the code.
 
-The schema is in `${CLAUDE_SKILL_DIR}/references/config.md`.
+Then ask one AskUserQuestion with: the behavior commands, the visual mode and reference,
+the architecture source, and `standing.commit`.
 
-If the repo has no architecture doc, draft one from the code you read: layering, where
-state lives, naming, error handling, testing conventions. Keep it under a page and
-specific to this repo. The reviewers are only as good as this file.
+## 2. Track
 
-## A2 — Read before cutting
+Propose a track in one line, with the reason. The human can change it.
 
-If there's a reference implementation, read it. It is the spec. Otherwise read the code
-the goal touches. For broad discovery, use ONE Explore agent and ask for conclusions and
-paths, not file dumps.
+| Track | When |
+| --- | --- |
+| `fix` | A bug or a regression. Follow `fix.md` instead of this file. |
+| `small` | 1 or 2 rows. |
+| `full` | 3 to 8 rows. More than 8 rows means two plans. |
 
-Keep what you learn for `plans/<slug>.reference.md`: for each checkpoint, the states,
-user-visible strings, data shapes, edge and error cases, and source paths or URLs. The
-spec agent and the reviewers read this instead of re-deriving the reference, and it
-survives compaction.
+For a change that is one obvious edit, say that plain plan mode is cheaper, and let the
+human choose.
 
-## A3 — Cut checkpoints
+## 3. Grill
 
-- **Skeleton first, then one deliberately small slice, then grow.** The early checkpoints
-  settle decisions that everything after them inherits. Keep them small enough that the
-  human really reviews those decisions.
-- **A few words per checkpoint.** If a title needs a paragraph, split the checkpoint.
-  Nobody reviews a wall of generated text, and that includes the plan.
-- **Sized to context.** The implementer must hold the relevant real code and its
-  reference in context. If it can't, split.
-- **Testable on its own.** If you can't say what its tests would assert, it isn't a
-  checkpoint yet.
-- **Each one leaves the product building and running.** Stubs are fine; broken is not.
-  The human gate reviews a running app.
-- **Harness first.** If gate 1 has no fast, headless way to read state and trigger
-  actions, or gate 2 has no capture script, `cp0` builds it. Its own gate 2 is a smoke
-  check: the PNG files exist, aren't blank, and pass the determinism check in `config.md`.
-- **Refactors are flagged.** A checkpoint that moves code without changing behavior gets
-  `kind: refactor`. Its spec is characterization tests that pass before and after, plus
-  a structural assertion that fails until the move lands, if one exists.
-- **Small goals don't need this.** If the goal cuts into fewer than 3 checkpoints, say
-  so: plain plan mode plus `/rinse:rinse` is cheaper. Let the user choose.
-- **3–8 is the cost sweet spot.** More than that means the goal is two plans.
+Use the `ratchet:grill` skill with the goal. It asks in rounds until no question is open
+and the human confirms. For the `small` track, ask only the questions that block the
+design. Keep the questions and answers for the design log.
 
-The slug is the goal in kebab-case, at most 40 characters, with `-2` appended if that
-name is taken. The plan file is `.claude/ratchet/plans/<slug>.md`:
+## 4. Read before you write
 
-```markdown
-# <goal>
-slug: <slug> · created: <YYYY-MM-DD>
+- **A reference implementation** is the spec. Read it. Write
+  `.claude/ratchet/plans/<slug>.reference.md`: for each row, the states, the texts that
+  users see, the data shapes, the edge and error cases, and the source paths.
+- **Prior art.** For code that the goal touches, follow `why.md` when the reason for the
+  current design is not clear. Put what you learn in the design log, under
+  `## Prior art`.
+- For a broad search, use one Explore agent. Ask for conclusions and paths, not file
+  contents.
 
-| id | checkpoint | target | status | base |
-| -- | ---------- | ------ | ------ | ---- |
-| cp1 | screen skeleton | profile | todo | |
-| cp2 | header only | profile | todo | |
-| cp3 | date formatting helper | - | todo | |
-| cp4 | list rows, static data | profile | todo | |
-| cp5 | list loading + error states | profile-error | todo | |
+## 5. Documents
 
-## Notes
-- cp2 · scope: header band only
-- cp4 · scope: whole screen
-- cp3 · done when: relative dates match the legacy formatter for the reference cases
-```
+1. Make the folder `docs/changes/NNNN-<slug>/`, with the next free number.
+2. Write the documents of the track, as `docs.md` says, with `status: draft`.
+3. Write each requirement with an `FR` ID and a coverage kind. Each success criterion
+   needs one or more requirements. A fix or a refactor needs `UB` requirements for the
+   behaviour that must not change.
+4. Run `RS doclint docs/changes/NNNN-<slug>` and `RS stelint docs/changes/NNNN-<slug>`.
+   Fix each `block` finding.
 
-- **`target`** is what gate 2 captures: a short `[a-z0-9-]` name that the capture script
-  maps to a route, story or state. `-` means the checkpoint has nothing visible, so gate
-  2 reads `n/a` for it.
-- **`scope:`** narrows the visual judgment. Differences outside it are deferred, not
-  blocking, so a skeleton can pass against a full-screen reference. The last checkpoint
-  on each target must judge the whole target.
-- **Other notes**, one line each and only when needed: `kind: refactor`, `done when:`,
-  and later `waive(...)` and `blocked:` lines.
-- **`reference:`** in the plan header overrides `config.visual.reference` for this plan,
-  in the same `kind value` form (e.g. `reference: url https://legacy.example.com`).
+## 6. Cut the checkpoints
 
-## A4 — Approve in plan mode
+- **Skeleton first, then a small slice, then grow.** The first rows settle the decisions
+  that the later rows use. Keep them small, so that the human reviews them well.
+- **Harness first.** When gate 1 has no fast headless way to read the state, or gate 2
+  has no capture script, the first row builds it (`kind: harness`).
+- **Choose before you build.** When the goal has variants (themes, layouts, two
+  approaches), add a `kind: choice` row first. It builds a cheap prototype or a board of
+  the variants. The human picks one. The later rows build only the pick.
+- **A few words for each row.** When a title needs a paragraph, split the row.
+- **Testable alone.** When you cannot say what its tests check, it is not a row yet.
+- **The product builds and runs after each row.** Stubs are fine. Broken is not.
+- **Size.** Give each row an `est` of production lines, not counting tests. A row with
+  an `est` above `size.prodLines` is too big. Split it.
+- **Coverage.** Each `FR` ID is in one or more rows. Each coverage kind needs a gate that
+  can see it: `visual` needs `config.visual`, and `smoke` needs a smoke check.
+- **Risk first.** Put the risky unknowns early.
+- **Refactor rows** get `kind: refactor`. Their tests pin the current behaviour.
 
-Enter plan mode if you aren't in it already. Put the following in the harness plan file:
-- the checkpoint table with its notes
-- the `architecture.md` draft (if new) and the config (if new)
-- one cost line: "≈ 5–8 agent runs per checkpoint (spec, implement, visual, two
-  reviewers; more on fix rounds) × N checkpoints"
+Write the table in the format of `contracts.md`, "Plan table". Add notes when a row needs
+them, one line each: `cp2 · scope: header band only`, `cp3 · done when: …`.
 
-Then ExitPlanMode. The user approves or edits.
+## 7. Roast
 
-After approval, write:
-- `.claude/ratchet/plans/<slug>.md` and `<slug>.reference.md`
-- `config.json` and `architecture.md`, if new
-- `.claude/ratchet/.gitignore` containing `evidence/`. Proof stays local; the gate
-  summary goes into commit bodies.
+Use the `ratchet:roast` skill on the documents and the draft table. Give it the settled
+decisions from the grill. Then:
+- Fix each finding, or write in `## Trade-offs` why you do not fix it.
+- `NEEDS_REWORK`: change the plan, then roast it one more time.
+- `INVESTIGATE`: add a spike row, or ask the human.
 
-Plans, config, architecture and learnings are meant to be committed.
+## 8. Approve in plan mode
 
-Then continue straight into **Run** for cp1: interactive, unless the user asked for
-`--auto`. The plan is approved; don't ask again.
+Enter plan mode. Write into the harness plan file:
+- the table and its notes
+- the document paths, with one line about each document
+- the roast verdict, and what you changed because of it
+- the config, when it is new or migrated, and `standing.commit`
+- one cost line: "about 5 to 8 agent runs for each row × N rows; review rounds add more"
+
+Then call ExitPlanMode. The human approves or edits.
+
+## 9. After approval
+
+1. Write `.claude/ratchet/plans/<slug>.md` and `<slug>.reference.md`.
+2. Write `config.json` version 2, when it is new or migrated.
+3. When `docs.root/architecture.md` does not exist, write it. Use the default rules from
+   `docs.md`, plus the rules that you found in the repo.
+4. Write `.claude/ratchet/.gitignore` with `evidence/`, `live.json`, `metrics.jsonl` and
+   `dreams/`.
+5. For each change document, set `status: approved` and run `RS doclint --approve <file>`.
+6. Add the change to `docs/changes/index.md`.
+7. Continue with `run.md` for the first row. Run interactive, unless the human asked for
+   `--auto`. Do not ask for approval again.
