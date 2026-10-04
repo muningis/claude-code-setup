@@ -305,6 +305,30 @@ t('b3 blocks an architecture finding only when its rule exists', () => {
   expect(triage.findings.map((f: any) => [f.id, f.ruleExists])).toEqual([['cp1-A1-1', true], ['cp1-A1-2', false], ['cp1-A1-3', false]])
 })
 
+t('b3 does not block on a learnings rule that is retired', () => {
+  const repo = makeRepo()
+  put(repo, '.claude/ratchet/learnings.md', '# Learnings\n\n'
+    + '### L-001\n- scope: src/**\n- rule: Keep the greeting short.\n- helpful: 0 · harmful: 0 · status: active\n\n'
+    + '### L-002\n- scope: src/**\n- rule: An old rule.\n- helpful: 0 · harmful: 3 · status: retired\n')
+  review(repo, 'arch', 1, [
+    { id: 'cp1-A1-1', severity: 'medium', file: 'src/greet.sh', issue: 'long greeting', rule: 'L-001' },
+    { id: 'cp1-A1-2', severity: 'medium', file: 'src/greet.sh', issue: 'breaks the old rule', rule: 'L-002' },
+  ])
+  review(repo, 'break', 1, [])
+  const r = gate(repo, 'b3')
+  expect(r.json.blocking).toEqual(['cp1-A1-1'])
+  expect(r.json.advisory).toEqual(['cp1-A1-2'])
+})
+
+t('learnings keeps the old rules without IDs after a dream adds an entry', () => {
+  const repo = makeRepo()
+  put(repo, '.claude/ratchet/learnings.md', '# Learnings\n\n- Verify the insets on a device.\n\n'
+    + '### L-001\n- scope: server/**\n- rule: Log the request ID.\n- helpful: 0 · harmful: 0 · status: active\n')
+  const out = sh(repo, ['bash', RS_SH, 'learnings', '--scope', 'mobile/a.kt']).out
+  expect(out).toContain('Verify the insets on a device.')
+  expect(out).not.toContain('L-001')
+})
+
 t('b3 reads version 1 verdicts as advisory', () => {
   const repo = makeRepo()
   copy(repo, 'verdicts/v1-arch.json', `${EV}/3-review-arch-r1.json`)

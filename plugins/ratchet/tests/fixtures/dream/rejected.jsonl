@@ -1,0 +1,1 @@
+{"date":"2026-10-03","bundle":"2026-10-03","op":"ADD","target":null,"rule":"Never render a card without a theme provider wrapper.","reason":"too narrow"}

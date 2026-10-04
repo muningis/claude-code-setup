@@ -1,0 +1,1 @@
+{"verdict":"CHANGES","resolved":["B4"],"findings":[{"id":"B5","severity":"low","issue":"tappingSaveClearsFocus passes without the fix because the desktop clickable takes focus","fix":"Set canFocus = false on the SAVE chip before the clickable, so the test can see a regression"}]}

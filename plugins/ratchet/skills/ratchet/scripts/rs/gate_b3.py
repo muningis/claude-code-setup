@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 
+import cmd_learnings
 import cmd_prove
 import common
 from common import RsError
@@ -104,8 +105,21 @@ def standards_text(ctx):
         seen.add(c)
         p = os.path.join(ctx.root, c)
         if os.path.isfile(p):
-            parts.append(common.read_text(p))
+            text = common.read_text(p)
+            if c.endswith("learnings.md"):
+                text = without_retired(text)
+            parts.append(text)
     return "\n".join(parts)
+
+
+def without_retired(text):
+    """The learnings text without the heading of each entry that is not active. A retired rule
+    must not make a finding block, but its entry stays in the file for the record. The heading
+    holds the ID, and other lines can repeat in active entries, so only the heading goes."""
+    drop = set(e["lines"][0].strip() for e in cmd_learnings.entries(text) if e["status"] != "active")
+    if not drop:
+        return text
+    return "\n".join(line for line in text.splitlines() if line.strip() not in drop)
 
 
 def earlier_record(ctx, fid):

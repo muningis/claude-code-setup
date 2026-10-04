@@ -1,0 +1,47 @@
+{
+  "candidates": [
+    {
+      "op": "ADD", "target": null, "scope": "src/**",
+      "rule": "Pin each feature flag default in a test before the screen reads it.",
+      "check": "A test names the flag and its default.",
+      "evidence": ["demo/cp1/3-triage-r1.json#cp1-A1-1"], "counter": [], "rows": 1
+    },
+    {
+      "op": "ADD", "target": null, "scope": "server/**",
+      "rule": "Always log the request ID on every error path of each handler.",
+      "check": "Each catch block of each handler logs the request ID.",
+      "evidence": ["demo/cp1/3-triage-r1.json#cp1-A1-1", "demo/cp2/3-triage-r1.json#cp2-A1-1"], "counter": [], "rows": 3
+    },
+    {
+      "op": "ADD", "target": null, "scope": "mobile/**",
+      "rule": "Never render a card without a theme provider.",
+      "check": "A test renders each card inside a theme provider.",
+      "evidence": ["demo/cp1/3-triage-r1.json#cp1-A1-2", "demo/cp2/3-triage-r1.json#cp2-A1-1"], "counter": [], "rows": 3
+    },
+    {
+      "op": "ADD", "target": null, "scope": "mobile/**/*.kt",
+      "rule": "Dismiss the keyboard from every native text field with the Done key and with a tap outside.",
+      "check": "A UI test taps outside the field and expects no focus.",
+      "evidence": ["cp5/4-human.md:3", "demo/cp1/3-triage-r1.json#cp1-A1-1", ".claude/ratchet/evidence/demo/cp2/3-triage-r1.json#cp2-A1-1"],
+      "counter": [], "rows": 3
+    },
+    {
+      "op": "EDIT", "target": "L-001", "scope": "mobile/**",
+      "rule": "Check each text field with the keyboard open, on a device or a simulator, and on a small screen.",
+      "check": "The device check pack lists each new text field and one small device.",
+      "evidence": ["demo/cp1/3-triage-r1.json#cp1-A1-1", "demo/cp2/3-triage-r1.json#cp2-A1-1"], "counter": [], "rows": 2
+    },
+    {
+      "op": "ADD", "target": null, "scope": "mobile/**",
+      "rule": "Anchor a score panel to the bottom of the screen above the safe area.",
+      "check": "A capture shows the panel above the home indicator.",
+      "evidence": ["demo/cp1/3-triage-r1.json#cp1-A1-2", "demo/cp2/3-triage-r1.json#cp2-A1-1"], "counter": [], "rows": 2
+    },
+    {
+      "op": "ADD", "target": null, "scope": "docs/**",
+      "rule": "Link each architecture decision record from the design log.",
+      "check": "The doc linter finds each record in the design log.",
+      "evidence": ["demo/cp1/3-triage-r1.json#cp1-A1-1", "demo/cp2/3-triage-r1.json#cp2-A1-1"], "counter": [], "rows": 2
+    }
+  ]
+}

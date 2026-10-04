@@ -51,15 +51,36 @@ def applies(entry, paths):
     return any(common.glob_match(g, p) for g in entry["scope"] for p in paths)
 
 
+def loose_text(text):
+    """The text outside every entry, without the title. In a version 1 file, or a file that a
+    dream changed, these are the old rules with no ID and no scope, so they always apply."""
+    out = []
+    in_entry = False
+    for line in text.splitlines():
+        if ENTRY.match(line.strip()):
+            in_entry = True
+            continue
+        if in_entry and line.startswith("#"):
+            in_entry = False
+        if in_entry or re.match(r"^#\s", line):
+            continue
+        out.append(line)
+    return "\n".join(out).strip()
+
+
 def digest(title, text, paths):
     found = entries(text)
     if not found:
         return ("## %s\n\n%s\n" % (title, text.strip())) if text.strip() else ""
     keep = [e for e in found if e["status"] == "active" and applies(e, paths)]
-    if not keep:
+    parts = []
+    loose = loose_text(text)
+    if loose:
+        parts.append(loose)
+    parts += ["\n".join(e["lines"]).rstrip() for e in keep]
+    if not parts:
         return ""
-    body = "\n".join("\n".join(e["lines"]).rstrip() for e in keep)
-    return "## %s\n\n%s\n" % (title, body)
+    return "## %s\n\n%s\n" % (title, "\n\n".join(parts))
 
 
 def main(argv):

@@ -55,7 +55,8 @@ time.
 
 **Stack library.** `~/.claude/ratchet/stacks/<stack>.md` holds rules for more than one
 repo, for example `compose-multiplatform`. The config lists the stacks of the repo in
-`dream.stacks`. A rule moves to the stack library when it repeats in 2 or more repos.
+`dream.stacks`. `RS learnings` reads them. In 2.0, no command moves a rule there. When a
+rule repeats in 2 or more repos, copy its entry there by hand.
 
 ## Nightly
 
@@ -65,10 +66,18 @@ repo in `~/.claude/ratchet/repos.json`. A repo joins that list at its first plan
 - It runs `claude -p` with `--max-budget-usd` from `dream.budgetUsd` and a short
   `--allowedTools` list.
 - The plist holds no token. Claude Code reads its own login.
+- The plist starts `~/.claude/ratchet/dream-launch.sh`. Each night, it finds the newest
+  installed ratchet, because a plugin upgrade changes the plugin path.
+- `RS dream install` prints the `launchctl` command that loads the job. With `--load`, it
+  runs that command.
 - When the Mac sleeps at 03:30, launchd runs the job when the Mac wakes.
 - `RS dream uninstall` removes it.
 
 ## T2: one prompt proposal each week
+
+In 2.0 this is a manual procedure. The eval suite is in the plugin's `evals/` folder. Run
+it with `claude plugin eval <plugin dir> --allow-tools Bash Write --runs 3 --max-cost-usd
+5`. Each run costs money, so run it only for a proposal.
 
 1. Pick the agent with the most harm signal: escaped defects, waived findings, or
    rounds over the cap.
@@ -82,4 +91,5 @@ repo in `~/.claude/ratchet/repos.json`. A repo joins that list at its first plan
 5. When the human approves, change the prompt on a branch of the plugin repo. Change the
    version, and ask the human to merge.
 
-Dream agents cannot read `evals/`. The guard stops them, so they cannot fit the graders.
+Do not give the reflect agent the `evals/` folder. An agent that sees the graders can fit
+its proposal to them, and then the eval proves nothing.

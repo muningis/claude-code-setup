@@ -69,7 +69,7 @@ when you resume.
 test -f .claude/ratchet/config.json && { echo '[ratchet] config:'; head -c 1500 .claude/ratchet/config.json; echo; } || echo '[ratchet] no config yet'
 find .claude/ratchet/plans -name '*.md' ! -name '*.reference.md' -exec grep -H '^| cp' {} + 2>/dev/null || echo '[ratchet] no plans yet'
 test -f .claude/ratchet/live.json && { echo '[ratchet] live:'; cat .claude/ratchet/live.json; echo; }
-find .claude/ratchet/dreams -name proposal.json 2>/dev/null | head -3 | sed 's/^/[ratchet] dream proposal: /'
+find .claude/ratchet/dreams -name proposal.json -exec sh -c 'test -f "$(dirname "$1")/review.json" || echo "[ratchet] dream proposal: $1"' _ {} \; 2>/dev/null | head -3
 find .claude/handovers -name 'ratchet-*.md' 2>/dev/null | sed 's/^/[ratchet] baton: /'
 true
 ```

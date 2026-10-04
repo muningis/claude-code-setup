@@ -1,0 +1,1 @@
+{"verdict":"CHANGES","findings":[{"id":"A3","severity":"medium","file":"ui/Widgets.kt:139","issue":"Home text fields (name/code/password) are not dismissible: no Done action, no tap-outside clearFocus","fix":"imeAction Done with onDone clearFocus; tap-outside clearFocus on the root"}]}

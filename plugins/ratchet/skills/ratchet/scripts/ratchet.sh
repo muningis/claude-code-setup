@@ -36,9 +36,9 @@
 # code is 0 for pass, 1 for fail and 2 for error. Any rs/cmd_<name>.py also runs as <name>.
 #
 #   state <slug> [<cp>]        where a checkpoint stands; without <cp>, the first open row
-#   gate <gate> <slug> <cp> --nonce <n> [--round <r>]
-#                              run b0, b1, b2-capture, b2, smoke, b3-prep or b3; then update
-#                              STATE and LIVE and add one line to METRICS
+#   gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--skip-arch]
+#                              run b0-prep, b0, b1, b2-capture, b2, smoke, b3-prep or b3; then
+#                              update STATE and LIVE and add one line to METRICS
 #   prove <slug> <cp> <id>     run a finding's proof: reproduced, unproven or invalid
 #   red-check <output-file>    say why a spec run failed: assert, stub, compile or runner
 #   size --prod <tree>         changed production and test lines since <tree>; skips lockfiles,
@@ -51,11 +51,21 @@
 #   live stop                  set active false
 #   metrics add <json>         append one line to metrics.jsonl
 #   report <slug> <cp>         write EV/4-report.md; print 10 lines or fewer for the human
-#   decide <slug> <cp> <text>  log the human's decision and start the next epoch
+#   decide <slug> <cp> <text> [--reopen b1|b3]
+#                              log the human's decision and start the next epoch
 #   retire <slug> <cp> <path> --reason <text>
 #                              unpin one test file and log the reason in 0-amendments.md
+#   row <slug> <cp> [<status>] [--base <sha>] [--note <text>]
+#                              change one plan row and add a note under ## Notes
 #   trace <slug> [<cp>]        requirement IDs against plan rows and test names
 #   config                     print config.json as version 2, with defaults filled in
+#   stelint | doclint <path>...
+#                              the STE-lite and document checks of references/docs.md
+#   learnings --scope <path>...
+#                              the learnings that apply to these paths (markdown, not JSON)
+#   keepawake start|stop       keep a Mac awake during a run, with caffeinate
+#   dream harvest|curate|apply|install|uninstall|register ...
+#                              the learning loop of references/dream.md
 
 set -euo pipefail
 

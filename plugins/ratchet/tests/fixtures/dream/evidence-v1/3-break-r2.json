@@ -1,0 +1,18 @@
+{
+  "verdict": "CHANGES",
+  "findings": [
+    {
+      "id": "B7",
+      "file": ".claude/ratchet/config.json",
+      "line": 9,
+      "severity": "medium",
+      "target": "code",
+      "scenario": "A later change drops an Info.plist key and every configured gate still passes.",
+      "issue": "The new launch smoke test is not wired into config.json, so automated gate runs skip it.",
+      "fix": "Add mobile/scripts/ios-run.sh to behavior.extra.",
+      "proof": "jq .behavior.extra .claude/ratchet/config.json  # no ios-run.sh"
+    }
+  ],
+  "resolved": ["B1", "B2"],
+  "notes": "How each r1 finding was checked."
+}
