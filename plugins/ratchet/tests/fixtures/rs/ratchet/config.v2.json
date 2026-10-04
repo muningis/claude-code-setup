@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "behavior": {
+    "one": "sh run.sh {files}",
+    "all": "sh run.sh tests/*.sh",
+    "timeout": 30,
+    "failureKinds": {}
+  },
+  "checks": [],
+  "tests": { "globs": ["tests/**"], "perRequirement": 3, "perCheckpoint": 20 },
+  "size": { "prodLines": 50 },
+  "visual": null,
+  "review": { "proofTimeout": 20, "archPaths": [] },
+  "caps": { "b1": 5, "b2": 3, "b3": 3 },
+  "docs": { "root": "docs", "ste": "off" }
+}

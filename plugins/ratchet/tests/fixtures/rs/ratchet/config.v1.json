@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "maxRounds": 3,
+  "maxDiffLines": 800,
+  "autoAfter": 2,
+  "behavior": {
+    "one": "mobile/scripts/test-files.sh {files}",
+    "all": "cd mobile && ./gradlew :shared:jvmTest --console=plain",
+    "extra": [
+      "cd mobile && ./gradlew :shared:compileKotlinIosSimulatorArm64 --console=plain",
+      "mobile/scripts/ios-run.sh",
+      "bun run check",
+      "bunx --bun vitest run"
+    ]
+  },
+  "visual": {
+    "mode": "render",
+    "capture": "mobile/scripts/capture.sh {target} {viewport} {out}",
+    "reference": { "kind": "command", "capture": "bun mobile/scripts/capture-web.ts {target} {viewport} {out}" },
+    "viewports": [390]
+  },
+  "architecture": ".claude/ratchet/architecture.md",
+  "models": {}
+}

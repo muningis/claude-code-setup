@@ -21,6 +21,8 @@
 #                              paths; warns when a file also held the user's uncommitted
 #                              edits from before <tree>
 #   lock <dir> <file>...       pin files: hash in <dir>/spec.lock, copy in <dir>/locked/
+#   lock <dir> --from <file>   the same; <file> lists the paths, one for each line. Use it
+#                              instead of `lock <dir> $FILES`, which zsh does not split.
 #   check <dir>...             exit 1 listing pinned files that changed or vanished
 #   restore <dir>              put changed or vanished pinned files back from the copies
 #   baton <slug> continue|stop <start> [<line>...]
@@ -28,6 +30,32 @@
 #                              (start = the resume command and next gate; lines = only what
 #                              isn't on disk) and print the marker the relay mod acts on
 #   baton <slug> clear         delete it: the plan is done
+#
+# These commands run in Python (python3 3.9 or newer; RS_PYTHON names another one). Each
+# prints one JSON object of 1 KB or less and puts the detail in an evidence file. The exit
+# code is 0 for pass, 1 for fail and 2 for error. Any rs/cmd_<name>.py also runs as <name>.
+#
+#   state <slug> [<cp>]        where a checkpoint stands; without <cp>, the first open row
+#   gate <gate> <slug> <cp> --nonce <n> [--round <r>]
+#                              run b0, b1, b2-capture, b2, smoke, b3-prep or b3; then update
+#                              STATE and LIVE and add one line to METRICS
+#   prove <slug> <cp> <id>     run a finding's proof: reproduced, unproven or invalid
+#   red-check <output-file>    say why a spec run failed: assert, stub, compile or runner
+#   size --prod <tree>         changed production and test lines since <tree>; skips lockfiles,
+#                              binaries and generated files (plain `size` stays in bash)
+#   exec --timeout <s> -- <cmd>
+#                              run <cmd> in a shell; after <s> seconds stop its process
+#                              group and exit 124
+#   live start <slug> <cp>     write LIVE with active true
+#   live set <key> <value>     update one LIVE field; <value> is JSON, else text
+#   live stop                  set active false
+#   metrics add <json>         append one line to metrics.jsonl
+#   report <slug> <cp>         write EV/4-report.md; print 10 lines or fewer for the human
+#   decide <slug> <cp> <text>  log the human's decision and start the next epoch
+#   retire <slug> <cp> <path> --reason <text>
+#                              unpin one test file and log the reason in 0-amendments.md
+#   trace <slug> [<cp>]        requirement IDs against plan rows and test names
+#   config                     print config.json as version 2, with defaults filled in
 
 set -euo pipefail
 
@@ -50,6 +78,20 @@ to_top() {
 
 # Outside a repo, lock/check/restore still work relative to the current directory.
 to_top_soft() { local top; if top=$(git rev-parse --show-toplevel 2>/dev/null); then cd "$top"; fi; }
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SELF="$HERE/$(basename "${BASH_SOURCE[0]}")"
+PY=${RS_PYTHON:-python3}
+
+# The Python core calls back into this script for snapshots, diffs and pins.
+py() {
+  command -v "$PY" >/dev/null 2>&1 || die "$PY not found: the $cmd command needs Python 3.9 or newer"
+  to_top_soft
+  # No .pyc files: the plugin directory may be read-only, and a cache would dirty the repo.
+  export RS_SH="$SELF" RS_ROOT="$PWD" PYTHONDONTWRITEBYTECODE=1
+  "$PY" "$HERE/rs/main.py" "$cmd" "$@"
+  exit $?
+}
 
 snap() {
   local tmp sha
@@ -92,6 +134,7 @@ case "$cmd" in
     fi
     ;;
   size)
+    if [ "${1:-}" = "--prod" ]; then py "$@"; fi
     to_top; need_tree "${1:-}"; now=$(snap)
     git diff --numstat "$1" "$now" -- . "$STATE" "${LOCKS[@]}" |
       awk '$1 != "-" { n += $1 + $2 } END { print n + 0 }'
@@ -131,7 +174,14 @@ case "$cmd" in
     done
     ;;
   lock)
-    dir=${1:-}; [ -n "$dir" ] || die "usage: lock <dir> <file>..."; shift
+    dir=${1:-}; [ -n "$dir" ] || die "usage: lock <dir> <file>... | lock <dir> --from <file>"; shift
+    if [ "${1:-}" = "--from" ]; then
+      list=${2:-}; [ -f "$list" ] || die "lock --from: no such file: ${list:-<file>}"
+      set --
+      while IFS= read -r line || [ -n "$line" ]; do
+        if [ -n "$line" ]; then set -- "$@" "$line"; fi
+      done < "$list"
+    fi
     [ $# -gt 0 ] || die "lock needs at least one file"
     to_top_soft; mkdir -p "$dir"; touch "$dir/spec.lock"
     for f in "$@"; do
@@ -183,7 +233,14 @@ case "$cmd" in
     } > "$file"
     echo "[ratchet] baton $file $how"
     ;;
+  state|gate|prove|red-check|exec|live|metrics|report|decide|retire|trace|config|stelint|doclint)
+    py "$@"
+    ;;
   *)
+    case "$cmd" in
+      ''|*[!a-z0-9-]*) ;;
+      *) [ ! -f "$HERE/rs/cmd_${cmd//-/_}.py" ] || py "$@" ;;
+    esac
     sed -n '/^# ratchet/,/^$/p' "$0" >&2; exit 2
     ;;
 esac

@@ -1,0 +1,29 @@
+{
+  "verdict": "CHANGES",
+  "findings": [
+    {
+      "id": "B1",
+      "file": "mobile/shared/src/jvmTest/kotlin/com/deckofredactions/SheetSlipsCaptureTest.kt",
+      "line": 79,
+      "severity": "medium",
+      "target": "tests",
+      "scenario": "The amended check counts 29,819 red pixels on the impl capture, and 26,578 of them are the waived Submit button.",
+      "issue": "The blob assertion proves nothing on the impl layout, because the Submit button alone clears the threshold.",
+      "fix": "Count blob pixels only inside each red edge run's y-span.",
+      "proof": "python3 /tmp/slipsprobe/px.py cp8/2-impl-390-r1.png  -> 500-1300: 29819, 500-600: 26578, 600-1300: 3241"
+    },
+    {
+      "id": "B2",
+      "file": "mobile/shared/src/commonMain/kotlin/com/deckofredactions/ui/cards/SlipsCardRenderer.kt",
+      "line": 197,
+      "severity": "medium",
+      "target": "code",
+      "scenario": "Any revealed fill that wraps across lines loses its per-fragment padding.",
+      "issue": "The renderer drops the padding that box-decoration-break:clone gives in the reference.",
+      "fix": "Extend the box by the pad width in drawFillStroke.",
+      "proof": "sips -c 260 720 --cropOffset 1940 40 cp8/2-impl-390-r1.png --out /tmp/slipsprobe/impl.png"
+    }
+  ],
+  "resolved": [],
+  "notes": "Tripwire is clean."
+}

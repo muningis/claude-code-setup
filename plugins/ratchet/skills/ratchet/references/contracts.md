@@ -231,6 +231,7 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 | --- | --- | --- |
 | `RS red-check <output-file>` | Classifies each failure as `assert`, `stub`, `compile` or `runner`, with `behavior.failureKinds` | JSON counts |
 | `RS size --prod <tree>` | Counts the added and deleted lines since `<tree>`. It ignores tests, lockfiles, binaries, generated files and `R/`. | JSON `prod`, `tests` |
+| `RS check <dir>...`, `RS restore <dir>` | Version 1 commands: find changed pinned files, and put them back. They keep their text output. | text |
 | `RS exec --timeout <s> -- <cmd>` | Runs `<cmd>` in a shell, and stops it after `<s>` seconds | The exit code of `<cmd>`, or 124 on a timeout |
 | `RS lock <dir> --from <file>` | Pins the paths that `<file>` lists, one path for each line | text |
 | `RS live start <slug> <cp>` | Writes `LIVE` with `active: true` | JSON |
@@ -250,6 +251,15 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 
 `LIVE` shows what runs now. den and the status line read it. The guard trusts it only
 when `active` is true and `updated` is less than 6 hours old.
+
+- The file is `.claude/ratchet/live.json` in the repo root. The mods read it relative to
+  the session folder, so start Claude Code in the repo root.
+- `gate` is the stage name from `STATE`: `B0` to `B5`.
+- `round` is the current round of that gate.
+- `roles[].role` is `spec`, `implement`, `visual`, `arch`, `break` or `relay`.
+  `roles[].status` is `working`, `done`, `failed` or `idle`.
+- Each `RS live` command and each gate sets `updated` to the current time.
+- `RS live stop` sets `active` to false and clears `roles`.
 
 ```json
 {
