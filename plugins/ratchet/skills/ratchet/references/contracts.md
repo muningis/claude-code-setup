@@ -241,8 +241,17 @@ Each line in `METRICS` is one JSON object:
 
 ## Agent outputs
 
-The engine passes these schemas to `agent()`. Reviewers also write their verdict to the
-evidence path that the engine gives them.
+The engine passes these schemas to `agent()`. Each agent also writes its JSON output to
+the evidence path that the engine gives it, because `RS` reads the files and the engine
+cannot write files:
+
+| Agent | File |
+| --- | --- |
+| spec | `EV/0-spec.json` |
+| implement | `EV/1-impl-r<r>.json` |
+| visual | `EV/2-visual-r<r>.json` |
+| review-arch | `EV/3-arch-r<r>.json` |
+| review-break | `EV/3-break-r<r>.json` |
 
 ### spec
 
