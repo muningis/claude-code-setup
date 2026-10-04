@@ -13,6 +13,7 @@ const MAX_RELAYS = 30 // per session: a run that keeps relaying without ending i
 // Module state: a hot reload drops it, which at worst skips one reset.
 let pending: string | null = null // the baton the next compaction installs
 let lastBaton = ''
+let nudged = '' // the baton whose leftover agents were already asked to stop
 let relays = 0
 
 const isRatchet = (command: string) => command === 'ratchet' || command.endsWith(':ratchet')
@@ -43,6 +44,12 @@ async function compactTo($: $, baton: string) {
   const installed = pending === null
   pending = null
   return installed
+}
+
+// ratchet's agents still running: each one would outlive the reset, idle.
+async function leftovers($: $) {
+  const agents = await $.agent.list()
+  return agents.filter(a => a.type.startsWith('ratchet:') && a.status === 'running').map(a => a.name ?? a.description)
 }
 
 async function relay($: $, slug: string, how: string, baton: string) {
@@ -79,12 +86,22 @@ export const register: Register = on => {
     } catch {
       return result // marker without a file: nothing to hand over
     }
-    const same = baton.replace(/ · written: \S+/, '') === lastBaton
+    const key = baton.replace(/ · written: \S+/, '')
+    const same = key === lastBaton
     if (same || relays >= MAX_RELAYS) {
       $.ui.log(`🦝 ratchet relay: stopped (${same ? 'same baton twice, no progress' : `${MAX_RELAYS} relays this session`})`)
       return result
     }
-    lastBaton = baton.replace(/ · written: \S+/, '')
+    const left = await leftovers($)
+    if (left.length > 0 && nudged !== key) {
+      // Once per baton; the repeated marker then relays, so it isn't a loop.
+      nudged = key
+      const text = `[ratchet relay] Before the reset, stop these with TaskStop: ${left.join(', ')}. Then end your turn with the same baton marker line.`
+      $.clock.after(250, () => void $.prompt.submit({ text }))
+      return result
+    }
+    if (left.length > 0) $.ui.log(`🦝 ratchet relay: still running after the reset: ${left.join(', ')}`)
+    lastBaton = key
     relays++
     // After the turn has ended: compaction is refused while one runs.
     $.clock.after(250, () => void relay($, slug, how, baton))

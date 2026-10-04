@@ -67,6 +67,8 @@ ratchet's relay mod (`hooks/relay.tsx`) then:
 The baton keeps baton's handover format, so `/baton:resume` reads it too.
 - The mod marks the run by adding `--relay` to it; without the mod (mods off,
   headless, desktop), ratchet runs in one context as before.
+- Any ratchet agent still running at the reset is named and asked to stop first
+  (ratchet stops each agent when its step ends; this catches the ones it missed).
 - It stops relaying when a baton repeats (no progress), or after 30 relays in a
   session.
 - `"relay": false` in `config.json` turns it off.

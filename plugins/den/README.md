@@ -10,10 +10,11 @@ doing, in a pane docked beside the transcript.
   - Each subagent climbs out of a trash can on the shelf, wearing a hat for its
     type (Explore: explorer hat; Plan: blue cap; the rest: hard hat).
   - It works with a live activity line, waves when done, and hops back in.
-- **Hyper, during a [ratchet](../ratchet) run.** The five crew raccoons (spec,
-  implement, visual, review-arch, review-break) work at staggered stations with
-  their props. Minions ferry loads along a moving conveyor, debris flies, and the
-  gear never stops. The beats:
+- **Hyper, during a [ratchet](../ratchet) run.** Five staggered stations, one per
+  crew role (spec, implement, visual, review-arch, review-break). A raccoon stands
+  at a station only while that role's agent works, so the den shows exactly who is
+  at work. Other agents (Explore, …) run the conveyor as minions. Debris flies off
+  the busy stations, and the gear never stops. The beats:
   - **Tamper:** sirens when `ratchet.sh check` catches a changed spec.
   - **Waiting on you:** the den freezes behind a **YOUR TURN!** sign at the human
     gate.

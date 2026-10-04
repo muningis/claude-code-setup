@@ -46,6 +46,17 @@ doesn't start until the current one locks.
 7. Agents get absolute paths, never pasted diffs or logs.
 8. No commit or push without the user's OK. Stage only with `RS stage`.
 9. The human gate is free text: no AskUserQuestion, no pass/fail options.
+10. **An agent lives as long as its step.** When the step ends, `TaskStop` it by name.
+    A "not running" reply is fine. A stopped agent counts as gone, so the respawn rules
+    below apply.
+    - spec: once B0 has pinned the spec
+    - visual: once its verdict is saved
+    - both reviewers: once both approve in one round
+    - implement: once the row goes `green`
+
+    Before every stop or hand-off (the B4 report, `blocked`, `error`, an escalation,
+    the size guard, `RS baton`, End of plan), stop every agent this checkpoint still
+    has.
 
 `RS` = `bash ${CLAUDE_SKILL_DIR}/scripts/ratchet.sh`: the deterministic mechanics
 (`snap [<name>]`, `drop`, `diff`, `size`, `changed`, `tripwire`, `stage`, `lock`,
@@ -105,8 +116,9 @@ Never re-snapshot an existing `BASE`: resuming relies on it. Round numbers conti
    already there aren't this checkpoint's; B4 reports them.
 2. Run `RS snap <slug>/<cp>/base` and put the short SHA in the row's `base`. Run
    `RS lock PIN` with whichever of the three state files exist.
-3. Spawn `ratchet:spec` with: the row and its Notes, the reference notes and reference
-   source paths, `architecture.md`, `learnings.md`, and the behavior commands.
+3. Spawn `ratchet:spec` named `spec-<slug>-<cp>` with: the row and its Notes, the
+   reference notes and reference source paths, `architecture.md`, `learnings.md`, and
+   the behavior commands.
 4. **Pin the spec.**
    - `RS diff BASE --name-only` is the spec set: test files, fixtures and helpers only.
      Anything else goes back.
@@ -120,7 +132,7 @@ Never re-snapshot an existing `BASE`: resuming relies on it. Round numbers conti
    - A passing case specifies nothing. Send it back once with the output; if it happens
      again, the row is `blocked`.
    - `kind: refactor` inverts this: characterization cases pass now.
-6. Row → `red`.
+6. Row → `red`. Stop `spec-<slug>-<cp>` (invariant 10).
 
 ### B1: Gate 1, behavior
 Spawn `ratchet:implement` named `impl-<slug>-<cp>`. Give it:
@@ -145,8 +157,8 @@ reference kinds and the dev server are in `${CLAUDE_SKILL_DIR}/references/config
    `EV/2-{impl,ref}-<vp>-r<n>.png`.
 2. `cmp -s` impl and ref identical → pass with no agent. Impl identical to the previous
    round → reuse that verdict.
-3. Otherwise spawn `ratchet:visual` with the image paths, target, scope, waivers and
-   expectation → `EV/2-visual-r<n>.json`.
+3. Otherwise spawn `ratchet:visual` named `visual-<slug>-<cp>` with the image paths,
+   target, scope, waivers and expectation → `EV/2-visual-r<n>.json`, then stop it.
    - `INVALID` → recapture, at most twice, then `error`.
    - A `fixable: true` finding blocks: the implementer fixes it, then B1's checks and
      B2 run again.
@@ -167,8 +179,8 @@ reference kinds and the dev server are in `${CLAUDE_SKILL_DIR}/references/config
    once more, then `error`.
 4. **Fix every finding.** Severity sets the order, not whether it gets fixed.
    - Code findings go to the implementer.
-   - Test findings go to `ratchet:spec` as an amendment, which is logged, re-locked and
-     shown at B4.
+   - Test findings go to a fresh `ratchet:spec` as an amendment, which is logged,
+     re-locked and shown at B4.
    - A finding you think is wrong: write why in `EV/3-response-r<n>.md` and let its
      reviewer re-judge. Never drop one silently.
    - Escalate to the user now, in both modes, when the reviewers contradict each other
@@ -179,6 +191,7 @@ reference kinds and the dev server are in `${CLAUDE_SKILL_DIR}/references/config
      delta must say why it wasn't raised before.
    - A reviewer that's gone gets a fresh spawn with its last verdict.
 6. Both approve in one round → `RS snap <slug>/<cp>/gated`, and the row → `green`.
+   Stop the reviewers and the implementer (invariant 10).
 
 ### B4: Gate 4, human
 If `RS changed GATED` shows edits made after the gates, re-run B1–B3 first. Then report

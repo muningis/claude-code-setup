@@ -10,7 +10,13 @@ const PATH = `${ROOT}/.claude/handovers/ratchet-slugify.md`
 /** The engine beneath the relay, answered from memory; returns what it saw. */
 function stage(engine: Engine, on: On, files: Record<string, string> = {}) {
   const clock = mock.clock(on, { now: 1_700_000_000_000 })
-  const seen = { runs: [] as string[], installed: [] as string[][], logs: [] as string[] }
+  const seen = { runs: [] as string[], installed: [] as string[][], logs: [] as string[], prompts: [] as string[] }
+  const agents: { id: string; description: string; type: string; status: string; name?: string }[] = []
+  on('agent.list', () => ({ value: agents }))
+  on('prompt.submit', ($, e) => {
+    seen.prompts.push(e.text)
+    return { text: e.text }
+  })
   on('turn.complete', ($, e) => ({ text: e.answer }))
   on('fs.read', ($, e) => {
     const hit = Object.keys(files).find(f => e.path === f || e.path.endsWith(`/${f}`))
@@ -38,7 +44,7 @@ function stage(engine: Engine, on: On, files: Record<string, string> = {}) {
     await clock.advance(300)
     for (let i = 0; i < 20; i++) await clock.advance(0)
   }
-  return { clock, seen, settle }
+  return { clock, seen, settle, agents }
 }
 
 const mainTurn = ($: Engine, answer: string, extra: object = {}) =>
@@ -90,6 +96,50 @@ describe('the relay', () => {
     const { seen } = stage($, on)
     await $.command.run({ command: 'compact', args: '' })
     expect(seen.installed).toEqual([['core summary']])
+  })
+})
+
+describe('leftover agents', () => {
+  const agent = (name: string, type: string, status = 'running') => ({ id: name, description: name, type, status, name })
+
+  test('running ratchet agents are asked to stop before the reset', async ($, on) => {
+    const { seen, settle, agents } = stage($, on, { [PATH]: BATON('cp3') })
+    agents.push(agent('impl-slugify-cp2', 'ratchet:implement'), agent('arch-slugify-cp2', 'ratchet:review-arch'))
+    await mainTurn($, `[ratchet] baton ${PATH} continue`)
+    await settle()
+    expect(seen.prompts.length).toBe(1)
+    expect(seen.prompts[0]).toMatch(/TaskStop: impl-slugify-cp2, arch-slugify-cp2/)
+    expect(seen.installed).toEqual([])
+    expect(seen.runs).toEqual([])
+
+    // They stopped; the same marker comes back and relays, not read as a loop.
+    agents.forEach(a => (a.status = 'killed'))
+    await mainTurn($, `[ratchet] baton ${PATH} continue`)
+    await settle()
+    expect(seen.prompts.length).toBe(1)
+    expect(seen.installed.length).toBe(1)
+    expect(seen.runs).toEqual(['ratchet run slugify --auto --relay'])
+  })
+
+  test('agents still running after one nudge are named, and the reset goes ahead', async ($, on) => {
+    const { seen, settle, agents } = stage($, on, { [PATH]: BATON('cp3') })
+    agents.push(agent('break-slugify-cp2', 'ratchet:review-break'))
+    await mainTurn($, `[ratchet] baton ${PATH} continue`)
+    await settle()
+    await mainTurn($, `[ratchet] baton ${PATH} continue`)
+    await settle()
+    expect(seen.prompts.length).toBe(1)
+    expect(seen.logs.join('\n')).toMatch(/still running after the reset: break-slugify-cp2/)
+    expect(seen.installed.length).toBe(1)
+  })
+
+  test("other agents, and ratchet's finished ones, don't count", async ($, on) => {
+    const { seen, settle, agents } = stage($, on, { [PATH]: BATON('cp3') })
+    agents.push(agent('scout', 'Explore'), agent('spec-slugify-cp2', 'ratchet:spec', 'completed'))
+    await mainTurn($, `[ratchet] baton ${PATH} continue`)
+    await settle()
+    expect(seen.prompts).toEqual([])
+    expect(seen.installed.length).toBe(1)
   })
 })
 

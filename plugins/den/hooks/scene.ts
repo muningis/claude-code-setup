@@ -105,6 +105,8 @@ export const ROLE_COLOR: Record<Role, number> = {
 }
 const dim = (c: number) => ((c >> 1) & 0x7f7f7f) + 0x101010
 
+const DIM = new Map(Object.values(C).map(c => [c!, dim(c!)] as [number, number]))
+
 const BANG = S.sprite(['R', 'R', 'R', '.', 'R'])
 const CHECK = S.sprite(['....N', '...N.', 'N.N..', '.N...'])
 const FLASH = new Map<number, number>([
@@ -203,6 +205,22 @@ function agentPlace(a: Look, now: number, slotX: number, slotY: number, canX: nu
 }
 
 // ── Hyper: the ratchet crew at full tilt ────────────────────────────────────
+
+/**
+ * Who is on screen in hyper mode: one raccoon per agent actually at work. A crew
+ * role shows while its agent works, and for a moment after it ends so its ✓ or !
+ * reads; any other working agent (Explore, …) runs the belt as a minion.
+ */
+export function hyperCast(m: Pick<SceneModel, 'actors' | 'now'>): { crew: Role[]; minions: number } {
+  const latest = (role: Role) => [...m.actors].reverse().find(a => a.role === role)
+  const crew = ROLES.filter(role => {
+    const a = latest(role)
+    return a !== undefined && (a.status === 'working' || (a.endedAt !== undefined && m.now - a.endedAt < GONE_MS))
+  })
+  const minions = m.actors.filter(a => a.kind === 'agent' && !a.role && a.status === 'working').length
+  return { crew, minions: Math.min(7, minions) }
+}
+
 function hyper(c: Canvas, m: SceneModel, f: number) {
   const { w: W, h: H } = c
   const waiting = beatAge(m, 'waiting') !== undefined
@@ -218,15 +236,20 @@ function hyper(c: Canvas, m: SceneModel, f: number) {
     c.dot(x, H - 1, C.K!)
   }
 
-  // The crew at their stations, left to right.
+  // The crew at their stations, left to right; an empty station keeps its prop.
+  const cast = hyperCast(m)
   ROLES.forEach((role, i) => {
+    const x = i * 9
+    if (!cast.crew.includes(role)) {
+      const base = i % 2 ? 7 : 3
+      c.hline(x + 1, base + 11, 8, dim(ROLE_COLOR[role]))
+      c.put(ROLE_PROP[role][0]!, x + 5, base + 6, { map: DIM })
+      return
+    }
     const a = [...m.actors].reverse().find(x => x.role === role)
     const status = a?.status ?? 'idle'
     const on = status === 'working'
-    const x = i * 9
-    // Idle ones fidget anyway: this is the ADHD den.
-    const fidget = !on && (F + i * 5) % 7 === 0 ? 1 : 0
-    const bob = on ? F % 2 : fidget
+    const bob = on ? F % 2 : 0
     const y = (i % 2 ? 7 : 3) + bob - jump
     const pose = waiting
       ? S.SMALL.look
@@ -256,8 +279,7 @@ function hyper(c: Canvas, m: SceneModel, f: number) {
   })
 
   // Minions: two lanes running opposite ways, loads on their heads.
-  const busy = m.actors.filter(a => a.status === 'working').length
-  const n = Math.min(7, 4 + busy)
+  const n = cast.minions
   const items = [S.ITEM.box, S.ITEM.bag, S.ITEM.paper, S.ITEM.bolt]
   for (let k = 0; k < n; k++) {
     const lane = k % 2
@@ -273,11 +295,12 @@ function hyper(c: Canvas, m: SceneModel, f: number) {
     if ((F + k) % 3 === 0) c.dot(x - dir * 2, y + 6, C.L!) // dust
   }
 
-  // Debris flying off the stations.
-  for (let i = 0; i < 16; i++) {
+  // Debris flying off the stations in use.
+  const used = ROLES.map((r, i) => (cast.crew.includes(r) ? i : -1)).filter(i => i >= 0)
+  for (let i = 0; i < (used.length ? 16 : 0); i++) {
     const life = 14 + Math.floor(rnd(i, 1) * 10)
     const t = (F + i * 5) % life
-    const sx = (i % 5) * 9 + 5
+    const sx = used[i % used.length]! * 9 + 5
     const vx = (rnd(i, 2) - 0.5) * 2.4
     const vy = -1.2 - rnd(i, 3) * 1.2
     const px = sx + vx * t

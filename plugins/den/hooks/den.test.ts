@@ -3,7 +3,7 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 import { gateOf, parsePlan, roleOf, summarize, trackLine, verdictOf } from './logic'
-import { compose, pack, ROWS } from './scene'
+import { compose, hyperCast, pack, ROWS } from './scene'
 
 const PANE = {
   plugin: 'den',
@@ -77,6 +77,20 @@ describe('reading events', () => {
     const p = { slug: 's', rows: parsePlan(plan) }
     expect(gateOf(p, [])).toBe('B1')
     expect(trackLine(p)).toBe('cp1 ✓━cp2 ◐')
+  })
+
+  test('hyper draws one raccoon per agent at work, not a fixed crowd', () => {
+    const look = (id: string, type: string, status: 'working' | 'done', extra = {}) => ({
+      id, kind: 'agent' as const, type, role: roleOf(type), status, bornAt: 0, ...extra,
+    })
+    const now = 100_000
+    expect(hyperCast({ now, actors: [look('s', 'ratchet:spec', 'working')] })).toEqual({ crew: ['spec'], minions: 0 })
+    expect(hyperCast({ now, actors: [look('s', 'ratchet:spec', 'working'), look('e', 'Explore', 'working')] }).minions).toBe(1)
+    expect(hyperCast({ now, actors: [] })).toEqual({ crew: [], minions: 0 })
+    // A finished reviewer lingers just long enough to show its verdict.
+    const arch = (endedAt: number) => look('a', 'ratchet:review-arch', 'done', { endedAt })
+    expect(hyperCast({ now, actors: [arch(now - 1000)] }).crew).toEqual(['review-arch'])
+    expect(hyperCast({ now, actors: [arch(now - 60_000)] }).crew).toEqual([])
   })
 
   test('frames pack to exactly columns × rows cells', () => {
