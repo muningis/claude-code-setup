@@ -9,7 +9,7 @@ Usage:
   trail.py QUERY [QUERY ...] [--cwd PATH | --all-projects] [--since SPAN]
            [--max-sessions N] [--max-hits N] [--context CHARS]
 
-QUERY     one or more tokens, ANDed. A path, a symbol, a feature name, an error
+QUERY     one or more tokens; a turn must hold all of them. A path, a symbol, a feature name, an error
           string — whatever you're tracing. Matching is case-insensitive; every
           token must appear (in a session, then in a turn) for it to count.
 

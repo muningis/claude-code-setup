@@ -208,7 +208,7 @@ describe('the live file', () => {
     ])
     expect(parseLive(file({ active: false }), NOW)).toBe(null)
     expect(parseLive(file({ updated: iso(7 * 3_600_000) }), NOW)).toBe(null)
-    expect(parseLive('{"active": tru', NOW)).toBe(null)
+    expect(parseLive('{"active": ', NOW)).toBe(null)
   })
 
   test('draws one live: actor per role, working while the file says so', () => {

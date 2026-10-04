@@ -224,7 +224,7 @@ describe('the status line', () => {
     const files: Record<string, string> = { [LIVE]: live({ updated: new Date(NOW - 7 * 3_600_000).toISOString() }) }
     const { clock, seen, settle } = stage($, on, files)
     await $.session.start(START)
-    for (const text of [live({ active: false }), '{"active": tru', '[]']) {
+    for (const text of [live({ active: false }), '{"active": ', '[]']) {
       files[LIVE] = text
       await clock.advance(5_000)
       await settle()

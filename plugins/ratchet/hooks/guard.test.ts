@@ -121,7 +121,7 @@ describe('the hook', () => {
     const hook = bashHook()
     const files: [string, ((now: number) => string) | undefined][] = [
       ['missing', undefined],
-      ['not json', () => '{"active": tru'],
+      ['not json', () => '{"active": '],
       ['inactive', live(60_000, { active: false })],
       ['six hours old', live(6 * 3_600_000)],
     ]
