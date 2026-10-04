@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
-import { gateOf, parsePlan, reconcile, roleOf, STALE_MS, summarize, trackLine, verdictOf } from './logic'
+import { gateOf, parseLive, parsePlan, reconcile, roleOf, STALE_MS, summarize, syncLive, trackLine, verdictOf } from './logic'
 import { compose, hyperCast, pack, ROWS } from './scene'
 
 const PANE = {
@@ -179,5 +179,70 @@ describe('the den in a session', () => {
     ;({ texts } = await paneText($))
     expect(texts).toMatch(/demo over/)
     expect(texts).not.toMatch(/RATCHET/)
+  })
+})
+
+describe('the live file', () => {
+  const NOW = 1_700_000_000_000
+  const iso = (agoMs: number) => new Date(NOW - agoMs).toISOString()
+  const file = (extra: object = {}) =>
+    JSON.stringify({
+      active: true,
+      slug: 's',
+      cp: 'cp2',
+      gate: 'B3',
+      round: 1,
+      roles: [
+        { role: 'arch', status: 'working', since: iso(60_000) },
+        { role: 'break', status: 'working', since: iso(30_000) },
+        { role: 'relay', status: 'working', since: iso(5_000) },
+      ],
+      updated: iso(10_000),
+      ...extra,
+    })
+
+  test('names the roles at work; relay, stale, inactive and unreadable runs name none', () => {
+    expect(parseLive(file(), NOW)?.roles.map(r => [r.role, r.status])).toEqual([
+      ['review-arch', 'working'],
+      ['review-break', 'working'],
+    ])
+    expect(parseLive(file({ active: false }), NOW)).toBe(null)
+    expect(parseLive(file({ updated: iso(7 * 3_600_000) }), NOW)).toBe(null)
+    expect(parseLive('{"active": tru', NOW)).toBe(null)
+  })
+
+  test('draws one live: actor per role, working while the file says so', () => {
+    const run = parseLive(file(), NOW)!
+    const drawn = syncLive([], run, NOW)
+    expect(drawn.map(a => [a.id, a.role, a.status, a.activity])).toEqual([
+      ['live:review-arch', 'review-arch', 'working', 'cp2 B3 r1'],
+      ['live:review-break', 'review-break', 'working', 'cp2 B3 r1'],
+    ])
+    expect(drawn[0]?.bornAt).toBe(NOW - 60_000)
+    expect(syncLive(drawn, run, NOW + 1000)).toBe(drawn) // nothing changed: the same array
+
+    // An agent working in the role already draws it.
+    const real = {
+      id: 'agent-1', kind: 'agent' as const, type: 'ratchet:review-arch', role: 'review-arch' as const,
+      label: 'review-arch', status: 'working' as const, activity: 'x', bornAt: 0,
+    }
+    expect(syncLive([real], run, NOW).map(a => a.id)).toEqual(['agent-1', 'live:review-break'])
+  })
+
+  test('marks a role done when it leaves the list, and all of them when the run ends', () => {
+    const both = syncLive([], parseLive(file(), NOW)!, NOW)
+    const later = NOW + 5_000
+    const archOnly = parseLive(file({ roles: [{ role: 'arch', status: 'working', since: iso(60_000) }] }), later)!
+    const after = syncLive(both, archOnly, later)
+    expect(after.map(a => [a.id, a.status, a.endedAt])).toEqual([
+      ['live:review-arch', 'working', undefined],
+      ['live:review-break', 'done', later],
+    ])
+    const over = syncLive(after, null, later + 4_000)
+    expect(over.map(a => [a.status, a.endedAt])).toEqual([
+      ['done', later + 4_000],
+      ['done', later],
+    ])
+    expect(reconcile(both, [], NOW + 10 * STALE_MS)).toBe(both) // the staleness rule leaves them to the file
   })
 })

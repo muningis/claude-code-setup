@@ -9,11 +9,13 @@ import {
   gateOf,
   iconOf,
   kTok,
+  parseLive,
   parsePlan,
   reconcile,
   roleOf,
   statusText,
   summarize,
+  syncLive,
   trackLine,
   verdictOf,
 } from './logic'
@@ -24,6 +26,8 @@ const DOCK_COLUMNS = 48
 const TICK_MS = 80 // hyper's frame period; calm draws every third tick
 const HYPER_IDLE_MS = 90_000 // hyper relaxes after this long with no ratchet work
 const PLAN_DIR = '.claude/ratchet/plans'
+const LIVE_FILE = '.claude/ratchet/live.json'
+const LIVE_POLL_MS = 2000
 
 const actors = atom({ plugin: 'den', key: 'actors' } as const, [])
 const mode = atom({ plugin: 'den', key: 'mode' } as const, 'calm')
@@ -41,6 +45,7 @@ let lastStatus: string | undefined = '∅'
 let tickN = 0
 let lastRatchetAt = 0
 let lastPlanPoll = 0
+let lastLivePoll = 0
 let demoTimers: Timer[] = []
 let demoPlanBefore: DenPlan | null = null
 
@@ -212,12 +217,27 @@ async function ratchetBash($: $, cmd: string, out: string) {
   await goHyper($)
 }
 
+// A ratchet run's agents live in a workflow, which `agent.list()` never shows:
+// the live file is where the den learns who is at work.
+async function followLiveRun($: $, now: number) {
+  if (now - lastLivePoll < LIVE_POLL_MS) return
+  lastLivePoll = now
+  const live = parseLive(await $.fs.read(LIVE_FILE).catch(() => ''), now)
+  if (live) lastRatchetAt = now // a live run is ratchet work, even between agents
+  const before = await read($, actors)
+  const after = syncLive(before, live, now)
+  if (after === before) return
+  await update($, actors, () => [...after])
+  if (live) await goHyper($)
+}
+
 async function housekeeping($: $, now: number, md: DenMode) {
   // The demo's actors aren't the engine's: leave them to its timeline.
   if (!demoTimers.length) {
     const before = await read($, actors)
     const after = reconcile(before, await $.agent.list(), now)
     if (after !== before) await update($, actors, () => [...after])
+    await followLiveRun($, now)
   }
   const list = await read($, actors)
   const keep = list.filter(

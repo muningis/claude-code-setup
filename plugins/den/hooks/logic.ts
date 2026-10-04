@@ -7,6 +7,19 @@ const ROLE_NAMES: readonly string[] = ['spec', 'implement', 'visual', 'review-ar
 /** An agent with no tool call for this long is waiting, not working (an idle teammate). */
 export const STALE_MS = 120_000
 
+/** Ids of the actors drawn from the live file: ratchet agents the engine's list never shows. */
+export const LIVE_PREFIX = 'live:'
+const LIVE_MAX_AGE_MS = 6 * 60 * 60 * 1000 // a crashed run leaves `active: true` behind
+const LIVE_ROLES = new Map<string, DenRole>([
+  ['spec', 'spec'],
+  ['implement', 'implement'],
+  ['visual', 'visual'],
+  ['arch', 'review-arch'],
+  ['break', 'review-break'],
+  ['review-arch', 'review-arch'],
+  ['review-break', 'review-break'],
+])
+
 /**
  * Squares the den's working agents with the engine's list: an agent the engine
  * stopped, finished or lost (TaskStop fires no turn end) is done; one quiet past
@@ -20,7 +33,8 @@ export function reconcile(
 ): readonly DenActor[] {
   let changed = false
   const next = actors.map(a => {
-    if (a.kind !== 'agent' || a.status !== 'working') return a
+    // The live file, not the engine's list, says whether a `live:` actor works.
+    if (a.kind !== 'agent' || a.status !== 'working' || a.id.startsWith(LIVE_PREFIX)) return a
     const info = engine.find(x => x.id === a.id)
     if (info && info.status !== 'running') {
       changed = true
@@ -33,6 +47,101 @@ export function reconcile(
     }
     return a
   })
+  return changed ? next : actors
+}
+
+export type LiveRole = { role: DenRole; status: string; since?: number }
+export type LiveRun = { cp?: string; gate?: string; round?: number; roles: LiveRole[] }
+
+/** What `.claude/ratchet/live.json` says is running, or null when no run is (inactive, stale, missing or unreadable). */
+export function parseLive(text: string, now: number): LiveRun | null {
+  let live: Record<string, unknown> | null
+  try {
+    live = JSON.parse(text)
+  } catch {
+    return null
+  }
+  const at = typeof live?.updated === 'string' ? Date.parse(live.updated) : NaN
+  if (live?.active !== true || !Number.isFinite(at) || now - at >= LIVE_MAX_AGE_MS) return null
+  const roles: LiveRole[] = []
+  for (const entry of Array.isArray(live.roles) ? (live.roles as Record<string, unknown>[]) : []) {
+    const role = typeof entry?.role === 'string' ? LIVE_ROLES.get(entry.role) : undefined
+    if (!role) continue
+    const since = typeof entry.since === 'string' ? Date.parse(entry.since) : NaN
+    roles.push({
+      role,
+      status: typeof entry.status === 'string' ? entry.status : '',
+      ...(Number.isFinite(since) ? { since } : {}),
+    })
+  }
+  return {
+    ...(typeof live.cp === 'string' ? { cp: live.cp } : {}),
+    ...(typeof live.gate === 'string' ? { gate: live.gate } : {}),
+    ...(typeof live.round === 'number' ? { round: live.round } : {}),
+    roles,
+  }
+}
+
+function liveActor(prev: DenActor | undefined, r: LiveRole, live: LiveRun, now: number): DenActor {
+  const status = r.status === 'working' ? 'working' : r.status === 'failed' ? 'failed' : r.status === 'done' ? 'done' : 'idle'
+  const where = [live.cp, live.gate && (live.round ? `${live.gate} r${live.round}` : live.gate)].filter(Boolean).join(' ')
+  return {
+    id: `${LIVE_PREFIX}${r.role}`,
+    kind: 'agent',
+    type: `ratchet:${r.role}`,
+    role: r.role,
+    label: r.role,
+    status,
+    activity: status === 'working' ? where || 'working' : status === 'idle' ? 'waiting' : status,
+    bornAt: r.since ?? (prev?.status === 'working' ? prev.bornAt : now),
+    ...(status === 'done' || status === 'failed' ? { endedAt: prev?.endedAt ?? now } : {}),
+  }
+}
+
+const sameLive = (a: DenActor, b: DenActor) =>
+  a.status === b.status && a.activity === b.activity && a.bornAt === b.bornAt && a.endedAt === b.endedAt
+
+/**
+ * Squares the den with a live ratchet run: one `live:<role>` actor per role in the
+ * live file, working while the file says so, done once the role leaves the list or
+ * the run ends. Returns the actors, or the same array when nothing changed.
+ */
+export function syncLive(actors: readonly DenActor[], live: LiveRun | null, now: number): readonly DenActor[] {
+  // A real agent working in a role already draws it.
+  const real = new Set(actors.filter(a => a.status === 'working' && !a.id.startsWith(LIVE_PREFIX)).map(a => a.role))
+  const want = new Map<DenRole, LiveRole>()
+  for (const r of live?.roles ?? []) {
+    const had = want.get(r.role)
+    if (!real.has(r.role) && (!had || (had.status !== 'working' && r.status === 'working'))) want.set(r.role, r)
+  }
+
+  let changed = false
+  const next: DenActor[] = []
+  const placed = new Set<DenRole>()
+  for (const a of actors) {
+    if (!a.id.startsWith(LIVE_PREFIX) || !a.role) {
+      next.push(a)
+      continue
+    }
+    const r = want.get(a.role)
+    if (r && live) {
+      const fresh = liveActor(a, r, live, now)
+      placed.add(a.role)
+      if (sameLive(a, fresh)) next.push(a)
+      else {
+        changed = true
+        next.push(fresh)
+      }
+    } else if (a.status !== 'done' && a.status !== 'failed') {
+      changed = true
+      next.push({ ...a, status: 'done', endedAt: now, tool: undefined, activity: 'done' })
+    } else next.push(a)
+  }
+  for (const [role, r] of want) {
+    if (placed.has(role) || !live) continue
+    changed = true
+    next.push(liveActor(undefined, r, live, now))
+  }
   return changed ? next : actors
 }
 

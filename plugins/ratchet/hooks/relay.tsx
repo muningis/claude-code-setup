@@ -1,20 +1,27 @@
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
+
+import { register as registerGuard } from './guard'
 
 // ratchet's relay: at each checkpoint's end the skill writes a minimal baton
 // (`RS baton`) and ends its turn with a marker; this resets the context to that
 // baton and, under --auto, starts the next run. A skill can't clear its own
-// context; a mod can.
+// context; a mod can. It also keeps the status line while a run is live.
 
 type $ = EngineInterface
 
 const MARKER = /^\[ratchet\] baton (.+\/\.claude\/handovers\/ratchet-([A-Za-z0-9._-]+)\.md) (continue|stop)\s*$/m
 const MAX_RELAYS = 30 // per session: a run that keeps relaying without ending is a loop
+const LIVE_FILE = '.claude/ratchet/live.json'
+const LIVE_MAX_AGE_MS = 6 * 60 * 60 * 1000 // a crashed run leaves `active: true` behind
+const STATUS_POLL_MS = 5000
 
 // Module state: a hot reload drops it, which at worst skips one reset.
 let pending: string | null = null // the baton the next compaction installs
 let lastBaton = ''
 let nudged = '' // the baton whose leftover agents were already asked to stop
 let relays = 0
+let poll: Timer | undefined
+let shown: string | undefined // the status line this mod set; none yet
 
 const isRatchet = (command: string) => command === 'ratchet' || command.endsWith(':ratchet')
 
@@ -59,7 +66,46 @@ async function relay($: $, slug: string, how: string, baton: string) {
   if (how === 'continue') await $.command.run({ command: await ratchetCommand($), args: `run ${slug} --auto --relay` })
 }
 
-export const register: Register = on => {
+/** The status line for a live run, or undefined when none is going. */
+function statusLine(text: string, now: number) {
+  let live: Record<string, unknown> | null
+  try {
+    live = JSON.parse(text)
+  } catch {
+    return undefined
+  }
+  const at = typeof live?.updated === 'string' ? Date.parse(live.updated) : NaN
+  if (live?.active !== true || !Number.isFinite(at) || now - at >= LIVE_MAX_AGE_MS) return undefined
+  const cp = typeof live.cp === 'string' ? live.cp : ''
+  const round = typeof live.round === 'number' ? ` r${live.round}` : ''
+  const gate = typeof live.gate === 'string' && live.gate ? `${live.gate}${round}` : ''
+  const minutes = Math.max(0, Math.floor((now - at) / 60_000))
+  return [`ratchet${cp ? ` ${cp}` : ''}`, gate, `${minutes}m`].filter(Boolean).join(' · ')
+}
+
+async function refreshStatus($: $) {
+  try {
+    const now = await $.clock.now()
+    const status = statusLine(await $.fs.read(LIVE_FILE).catch(() => ''), now)
+    if (status === shown) return
+    shown = status
+    await $.ui.status(status)
+  } catch {
+    // A status line is never worth a failed hook.
+  }
+}
+
+export const register: Register = (on, options) => {
+  // A plugin names one hooks module: the guard rides in this one.
+  registerGuard(on, options)
+
+  on('session.start', async ($, e, next) => {
+    poll?.cancel()
+    poll = $.clock.every(STATUS_POLL_MS, () => void refreshStatus($))
+    await refreshStatus($)
+    return next(e)
+  })
+
   // The flag that tells the skill to hand over: present only when this mod is.
   on('command.run', async ($, e, next) => {
     if (!isRatchet(e.command) || !/^\s*run\b/.test(e.args) || /(^|\s)--relay\b/.test(e.args)) return next(e)
@@ -76,6 +122,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    await refreshStatus($)
     if (e.agentId || e.reason !== 'answer') return result
     const hit = MARKER.exec(e.answer)
     if (!hit) return result

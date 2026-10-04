@@ -3,14 +3,21 @@ import type { On } from 'claude-code'
 import type { Engine } from 'claude-code/testing'
 
 const ROOT = '/repo'
+const NOW = 1_700_000_000_000
 const BATON = (next: string, stamp = '2026-10-03-1200') =>
   `# Handover — ratchet slugify\n<!-- scope: repo · roots: ${ROOT} · written: ${stamp} -->\n**Start here:** /ratchet run slugify --auto  (next: ${next} → B0)\n- standing OK: commit each green row\n`
 const PATH = `${ROOT}/.claude/handovers/ratchet-slugify.md`
 
 /** The engine beneath the relay, answered from memory; returns what it saw. */
 function stage(engine: Engine, on: On, files: Record<string, string> = {}) {
-  const clock = mock.clock(on, { now: 1_700_000_000_000 })
-  const seen = { runs: [] as string[], installed: [] as string[][], logs: [] as string[], prompts: [] as string[] }
+  const clock = mock.clock(on, { now: NOW })
+  const seen = {
+    runs: [] as string[],
+    installed: [] as string[][],
+    logs: [] as string[],
+    prompts: [] as string[],
+    statuses: [] as (string | undefined)[],
+  }
   const agents: { id: string; description: string; type: string; status: string; name?: string }[] = []
   on('agent.list', () => ({ value: agents }))
   on('prompt.submit', ($, e) => {
@@ -40,6 +47,11 @@ function stage(engine: Engine, on: On, files: Record<string, string> = {}) {
     seen.logs.push(e.text)
     return { value: undefined }
   })
+  on('ui.status', ($, e) => {
+    seen.statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
   const settle = async () => {
     await clock.advance(300)
     for (let i = 0; i < 20; i++) await clock.advance(0)
@@ -157,5 +169,61 @@ describe('the --relay flag', () => {
     const { seen } = stage($, on, { '.claude/ratchet/config.json': '{"relay": false}' })
     await $.command.run({ command: 'ratchet', args: 'run' })
     expect(seen.runs).toEqual(['ratchet run'])
+  })
+})
+
+describe('the status line', () => {
+  const LIVE = '.claude/ratchet/live.json'
+  const START = { cwd: ROOT, surface: 'terminal', isInteractive: true } as const
+  const live = (extra: object = {}) =>
+    JSON.stringify({ active: true, slug: 'slugify', cp: 'cp2', gate: 'B1', round: 2, roles: [], updated: new Date(NOW - 7 * 60_000).toISOString(), ...extra })
+
+  test('shows the checkpoint, gate, round and minutes while a run is live, and clears when it ends', async ($, on) => {
+    const files: Record<string, string> = { [LIVE]: live() }
+    const { clock, seen, settle } = stage($, on, files)
+    await $.session.start(START)
+    await clock.settle()
+    expect(seen.statuses).toEqual(['ratchet cp2 · B1 r2 · 7m'])
+
+    await clock.advance(5_000)
+    await settle()
+    expect(seen.statuses.length).toBe(1) // the same line is not set twice
+
+    await clock.advance(55_000)
+    await settle()
+    expect(seen.statuses).toEqual(['ratchet cp2 · B1 r2 · 7m', 'ratchet cp2 · B1 r2 · 8m'])
+
+    files[LIVE] = live({ active: false })
+    await clock.advance(5_000)
+    await settle()
+    expect(seen.statuses[2]).toBeUndefined()
+    expect(seen.statuses.length).toBe(3)
+  })
+
+  test('refreshes at the end of a turn without waiting for the poll', async ($, on) => {
+    const files: Record<string, string> = {}
+    const { clock, seen } = stage($, on, files)
+    await $.session.start(START)
+    await clock.settle()
+    expect(seen.statuses).toEqual([])
+    files[LIVE] = live()
+    await mainTurn($, 'done')
+    await clock.settle()
+    expect(seen.statuses).toEqual(['ratchet cp2 · B1 r2 · 7m'])
+  })
+
+  test('shows nothing for a stale, inactive or unreadable live file', async ($, on) => {
+    const files: Record<string, string> = { [LIVE]: live({ updated: new Date(NOW - 7 * 3_600_000).toISOString() }) }
+    const { clock, seen, settle } = stage($, on, files)
+    await $.session.start(START)
+    for (const text of [live({ active: false }), '{"active": tru', '[]']) {
+      files[LIVE] = text
+      await clock.advance(5_000)
+      await settle()
+    }
+    delete files[LIVE]
+    await clock.advance(5_000)
+    await settle()
+    expect(seen.statuses).toEqual([])
   })
 })
