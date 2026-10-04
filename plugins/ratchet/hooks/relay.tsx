@@ -10,7 +10,20 @@ import { register as registerGuard } from './guard'
 type $ = EngineInterface
 
 const MARKER = /^\[ratchet\] baton (.+\/\.claude\/handovers\/ratchet-([A-Za-z0-9._-]+)\.md) (continue|stop)\s*$/m
+// A lead that types the marker by hand can drop the path (one real reset in four was lost
+// that way). The slug alone names the file, relative to the session folder.
+const SHORT_MARKER = /^\[ratchet\] baton (?:ratchet-)?([A-Za-z0-9._-]+?)(?:\.md)? (continue|stop)\s*$/m
 const MAX_RELAYS = 30 // per session: a run that keeps relaying without ending is a loop
+
+export function parseMarker(answer: string): { path: string; slug: string; how: string } | null {
+  // Markdown can wrap the line in backticks.
+  const text = answer.replace(/`/g, '')
+  const full = MARKER.exec(text)
+  if (full) return { path: full[1]!, slug: full[2]!, how: full[3]! }
+  const short = SHORT_MARKER.exec(text)
+  if (short) return { path: `.claude/handovers/ratchet-${short[1]}.md`, slug: short[1]!, how: short[2]! }
+  return null
+}
 const LIVE_FILE = '.claude/ratchet/live.json'
 const LIVE_MAX_AGE_MS = 6 * 60 * 60 * 1000 // a crashed run leaves `active: true` behind
 const STATUS_POLL_MS = 5000
@@ -124,9 +137,9 @@ export const register: Register = (on, options) => {
     const result = await next(e)
     await refreshStatus($)
     if (e.agentId || e.reason !== 'answer') return result
-    const hit = MARKER.exec(e.answer)
+    const hit = parseMarker(e.answer)
     if (!hit) return result
-    const [, path, slug, how] = hit
+    const { path, slug, how } = hit
     let baton: string
     try {
       baton = await $.fs.read(path)

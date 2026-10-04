@@ -99,3 +99,25 @@ The plan file is `~/.claude/plans/composed-jumping-cerf.md`. In short:
 - **One design log for every track.** Rejected. The user asked for a PRD and a spec, so
   the full track keeps them, with word budgets.
 - **Remove the original plugins.** Rejected by the user. Both stay.
+
+## Results
+
+### 2026-10-04 · P0 baseline of 0.2.1
+
+The data is the epstein-against-humanity run, rows cp7 to cp10, which started after 0.2.1
+landed. Four rows give ranges, not statistics. The scripts are in `/tmp/p0-baseline/`.
+
+| Measure, per checkpoint | 0.2.1 (mean) | Before 0.2.1 (median) | 2.0 target |
+| --- | --- | --- | --- |
+| Total cost | $9.30 | about $11 | below $9.30 |
+| Lead cost | $3.80 | $5.69 | $1.50 or less |
+| Lead wake-ups | 12 | 14 | 3 or fewer |
+| Lead context, mean / peak | 107K / 160K | 369K / 396K | lower, also at the human gate |
+| Handover resets that work | 3 of 4 | - | 4 of 4 |
+| Idle agent minutes after a lock | 0 | 152 | 0 |
+| Rounds B1 / B2 / B3 | 3 / 3 / 2 | 4 / 2 / 2 | 3 / 3 / 2 or fewer |
+
+- The context reset cut the lead context and the lead cost. The wake-ups, the rounds and
+  the gate time did not change.
+- One reset failed, because a hand-typed marker had no path. The relay now accepts the
+  slug alone.

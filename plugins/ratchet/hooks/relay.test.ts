@@ -81,6 +81,14 @@ describe('the relay', () => {
     expect(seen.runs).toEqual([])
   })
 
+  test('a hand-typed marker with only the slug, in backticks, still resets', async ($, on) => {
+    const { seen, settle } = stage($, on, { '.claude/handovers/ratchet-slugify.md': BATON('cp4') })
+    await mainTurn($, 'cp3 locked.\n`[ratchet] baton slugify continue`')
+    await settle()
+    expect(seen.installed.length).toBe(1)
+    expect(seen.runs).toEqual(['ratchet run slugify --auto --relay'])
+  })
+
   test('ignores answers without the marker, subagent turns and aborted turns', async ($, on) => {
     const { seen, settle } = stage($, on, { [PATH]: BATON('cp3') })
     await mainTurn($, 'all done, no baton')
