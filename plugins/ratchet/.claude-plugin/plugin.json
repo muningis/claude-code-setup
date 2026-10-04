@@ -1,8 +1,8 @@
 {
   "name": "ratchet",
   "displayName": "Ratchet",
-  "version": "0.2.1",
-  "description": "Helix-style checkpoint workflow: plan a feature as small checkpoints (skeleton → small slice → grow), then push each through four gates — red-first pinned tests, a visual diff against a reference, two blind adversarial reviewers, your approval — before the next one starts. Feedback compounds in .claude/ratchet/learnings.md; --auto is earned.",
+  "version": "2.0.0",
+  "description": "Plan-and-verify workflow. Grill the goal, write a PRD, spec and design log, roast the plan, then push small checkpoints through a deterministic engine: red tests, behaviour, visual, two blind reviewers whose findings block only with a proof or a rule ID, and your approval. Also fix, verify, handover/resume and why flows, STE-lite document checks, and a nightly dream that proposes learnings for you to approve.",
   "author": {
     "name": "muningis",
     "email": "rokas@muningis.lt"
@@ -14,7 +14,8 @@
     "verification",
     "review",
     "visual",
-    "helix",
-    "tdd"
+    "design-log",
+    "tdd",
+    "ste100"
   ]
 }

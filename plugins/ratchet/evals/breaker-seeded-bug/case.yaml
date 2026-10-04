@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: breaker-seeded-bug
+context:
+  add_dirs: [resources]

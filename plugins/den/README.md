@@ -22,7 +22,9 @@ doing, in a pane docked beside the transcript.
   - **Plan done:** confetti.
 
   Ratchet needs no changes: the den recognizes `ratchet:*` agents, the helper
-  script and `.claude/ratchet/plans/`.
+  script and `.claude/ratchet/plans/`. Ratchet 2.0 runs its gates in a workflow,
+  whose agents the den cannot see, so the den also draws the roles in
+  `.claude/ratchet/live.json`.
 
 ```
 /den              open or close the pane

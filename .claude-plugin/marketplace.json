@@ -52,7 +52,7 @@
     {
       "name": "ratchet",
       "source": "./plugins/ratchet",
-      "description": "Helix-style checkpoint workflow: plan a feature as small checkpoints (skeleton → small slice → grow), then push each through four gates — red-first pinned tests, a visual diff against a reference, two blind adversarial reviewers, your approval — before the next one starts. Your feedback compounds in learnings.md; --auto is earned."
+      "description": "Plan-and-verify workflow: grill, PRD/spec/design log, roast, then small checkpoints that a deterministic engine pushes through red tests, behaviour, visual, two blind reviewers (findings block only with a proof or a rule ID) and your approval. Also fix, verify, handover/resume and why flows, STE-lite doc checks, and a nightly dream that proposes learnings for you to approve."
     },
     {
       "name": "den",
