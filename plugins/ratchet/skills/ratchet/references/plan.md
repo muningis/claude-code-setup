@@ -110,7 +110,10 @@ Then call ExitPlanMode. The human approves or edits.
 
 ## 9. After approval
 
-1. Write `.claude/ratchet/plans/<slug>.md` and `<slug>.reference.md`.
+1. Write `.claude/ratchet/plans/<slug>.md` and `<slug>.reference.md`. When the change
+   folder is not `NNNN-<slug>` (two plans share it), name it in the header line:
+   `slug: <slug> · created: <date> · change: docs/changes/NNNN-<name>`. The gates read
+   the requirement kinds from that folder.
 2. Write `config.json` version 2, when it is new or migrated.
 3. When `docs.root/architecture.md` does not exist, write it. Use the default rules from
    `docs.md`, plus the rules that you found in the repo.

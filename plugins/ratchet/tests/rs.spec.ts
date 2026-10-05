@@ -166,6 +166,19 @@ t('b0 tells a compile error from an assertion or a stub, and fails on a missing 
   expect(rs(partial, 'state', 'demo', 'cp1').json).toMatchObject({ stage: 'B0', rounds: { b0: 1 } })
 })
 
+t('b0 reads requirement kinds from the change folder named in the plan header', () => {
+  // Two plans can share one change folder whose name ends in neither slug.
+  const repo = makeRepo()
+  const text = readFileSync(join(repo, '.claude/ratchet/plans/demo.md'), 'utf8')
+  put(repo, '.claude/ratchet/plans/demo.md',
+    text.replace('created: 2026-10-04', 'created: 2026-10-04 · change: docs/changes/0001-shared (FR-001..FR-002)'))
+  put(repo, 'docs/changes/0001-shared/spec.md',
+    '# Spec\n- **FR-001** (test): It greets by name.\n- **FR-002** (visual): The greeting matches the reference.\n')
+  snapBase(repo)
+  addSpec(repo, 'fr001.sh')
+  expect(gate(repo, 'b0').json.trace.missing).toEqual([])
+})
+
 t('b0 pins the tests, snapshots red, moves to B1, and updates LIVE and METRICS', () => {
   const repo = makeRepo()
   snapBase(repo)

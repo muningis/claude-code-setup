@@ -11,16 +11,36 @@ from common import RsError
 # docs.md: `- **FR-001** (test): When ...`
 REQ_LINE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+\*\*([A-Z]{2,}-\d+)\*\*\s*\(([A-Za-z]+)\)")
 MAX_SCAN = 1000000
+# plan header: `slug: a · created: … · change: docs/changes/0001-a-and-b (…)`
+CHANGE_KEY = re.compile(r"(?:^|·)\s*change:\s*([^\s·(]+)")
+
+
+def header_change(root, base, slug):
+    """The folder named by `change:` in the plan header, as a path or a bare folder name."""
+    path = common.plan_path(root, slug)
+    if not os.path.isfile(path):
+        return None
+    for line in common.read_text(path).splitlines():
+        if line.lstrip().startswith("|"):
+            break
+        m = CHANGE_KEY.search(line)
+        if m:
+            ref = m.group(1).rstrip("/")
+            full = os.path.normpath(os.path.join(root if "/" in ref else base, ref))
+            if full.startswith(os.path.normpath(root) + os.sep) and os.path.isdir(full):
+                return full
+    return None
 
 
 def change_dirs(root, cfg, slug):
-    """docs/changes/NNNN-<slug>/ folders. contracts.md does not say how a slug finds its folder."""
+    """The plan header's `change:` folder, plus each docs/changes/NNNN-<slug>/ folder."""
     base = os.path.join(root, cfg["docs"].get("root") or "docs", "changes")
-    found = []
+    named = header_change(root, base, slug)
+    found = [named] if named else []
     if os.path.isdir(base):
         for name in sorted(os.listdir(base)):
             full = os.path.join(base, name)
-            if os.path.isdir(full) and (name == slug or name.endswith("-" + slug)):
+            if os.path.isdir(full) and (name == slug or name.endswith("-" + slug)) and full != named:
                 found.append(full)
     return found
 
