@@ -772,3 +772,28 @@ t('prove copies the files that a proof changed to a backup before it restores th
   expect(existsSync(join(repo, 'stray.txt'))).toBe(false)
   expect(readFileSync(join(repo, 'src/greet.sh'), 'utf8')).toBe(before)
 })
+
+t('--root runs the command in that repo from a folder outside any repo', () => {
+  const repo = makeRepo()
+  const outside = mkdtempSync(join(tmpdir(), 'rs-out-'))
+  repos.push(outside)
+  const r = sh(outside, ['bash', RS_SH, 'config', '--root', repo])
+  expect(r.code).toBe(0)
+  expect(JSON.parse(r.out).version).toBe(2)
+  const s = sh(outside, ['bash', RS_SH, '--root', repo, 'state', 'demo', 'cp1'])
+  expect(parse(s.out).slug).toBe('demo')
+})
+
+t('--root after -- belongs to the command that exec runs', () => {
+  const repo = makeRepo()
+  const r = sh(repo, ['bash', RS_SH, 'exec', '--timeout', '5', '--', 'sh', '-c', 'echo "$@"', 'x', '--root', '/nonexistent'])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain('--root /nonexistent')
+})
+
+t('--root with a missing directory is an error with exit code 2', () => {
+  const repo = makeRepo()
+  const r = sh(repo, ['bash', RS_SH, 'config', '--root', join(repo, 'nope')])
+  expect(r.code).toBe(2)
+  expect(r.err).toContain('--root is not a directory')
+})

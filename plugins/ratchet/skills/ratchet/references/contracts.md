@@ -474,6 +474,8 @@ The lead starts the workflow with these `args`:
   "caps": { "b1": 5, "b2": 3, "b3": 3 }, "models": {} }
 ```
 
+- The engine appends `--root <repo>` to every RS command. `ratchet.sh` honours `--root`
+  before a literal `--`, so a relay can run it from any folder without `cd`.
 - Use a new `nonce` for each run. A resumed workflow replays cached results for the same
   prompts, so an old nonce runs no gate again.
 - `epoch` from `STATE` wins over `args.epoch`.

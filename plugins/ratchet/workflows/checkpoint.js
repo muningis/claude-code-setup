@@ -140,13 +140,17 @@ function checkState(state, want) {
   }
   return { ok: true, reason: "" };
 }
-function stateCommand(rs, slug, cp, nonce) {
-  return `${rs} state ${slug} ${cp} --nonce ${nonce}`;
+function rootArg(repo) {
+  const path = /^[A-Za-z0-9_./-]+$/.test(repo) ? repo : `'${repo.replace(/'/g, `'\\''`)}'`;
+  return ` --root ${path}`;
 }
-function gateCommand(rs, gate, slug, cp, nonce, round, extra = []) {
+function stateCommand(rs, repo, slug, cp, nonce) {
+  return `${rs} state ${slug} ${cp} --nonce ${nonce}${rootArg(repo)}`;
+}
+function gateCommand(rs, repo, gate, slug, cp, nonce, round, extra = []) {
   const flag = round === null ? "" : ` --round ${round}`;
   const more = extra.length > 0 ? ` ${extra.join(" ")}` : "";
-  return `${rs} gate ${gate} ${slug} ${cp} --nonce ${nonce}${flag}${more}`;
+  return `${rs} gate ${gate} ${slug} ${cp} --nonce ${nonce}${flag}${more}${rootArg(repo)}`;
 }
 function makeNonce(base, counter) {
   return `${base}-${counter}`;
@@ -193,8 +197,8 @@ function gateVerdict(res) {
 }
 const WAIT_SECONDS = 480;
 const MAX_WAITS = 15;
-function waitCommand(rs, slug, cp, job, nonce) {
-  return `${rs} wait ${slug} ${cp} ${job} --nonce ${nonce} --timeout ${WAIT_SECONDS}`;
+function waitCommand(rs, repo, slug, cp, job, nonce) {
+  return `${rs} wait ${slug} ${cp} ${job} --nonce ${nonce} --timeout ${WAIT_SECONDS}${rootArg(repo)}`;
 }
 function isSafeJob(job) {
   return typeof job === "string" && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(job) && !job.includes("..");
@@ -367,7 +371,7 @@ function agentOpts(agentType, label, phaseTitle, schema, model) {
 }
 function relayPrompt(cfg, command) {
   return [
-    `Run this one command from ${cfg.repo}. It prints one JSON object.`,
+    "Run this one command exactly as written, as one Bash call. Do not cd first, and add no prefix, pipe or redirect. The command names its repo with --root and prints one JSON object.",
     'Return {"raw": "<the JSON text it printed>"}: the exact text, with no field changed, added or dropped. Do not summarise it.',
     "Give the Bash call a timeout of 600000 ms. Exit codes 1 and 2 are normal. Run nothing else.",
     "",
@@ -514,7 +518,7 @@ async function run(cfg) {
   const gate = async (name, round, phaseTitle, opts = {}) => {
     nonceCount += 1;
     const nonce = makeNonce(cfg.nonce, nonceCount);
-    const command = gateCommand(cfg.rs, name, cfg.slug, cfg.cp, nonce, round, [...opts.extra || [], "--detach"]);
+    const command = gateCommand(cfg.rs, cfg.repo, name, cfg.slug, cfg.cp, nonce, round, [...opts.extra || [], "--detach"]);
     let res = await relay(`gate ${name} r${round}`, command, nonce, phaseTitle);
     for (let waits = 0;gateVerdict(res) === "pending"; waits++) {
       if (waits >= MAX_WAITS)
@@ -523,7 +527,7 @@ async function run(cfg) {
         throw stop("harness-error", `The ${name} gate returned a bad job ID.`);
       nonceCount += 1;
       const waitNonce = makeNonce(cfg.nonce, nonceCount);
-      res = await relay(`wait ${name} r${round}`, waitCommand(cfg.rs, cfg.slug, cfg.cp, res.job, waitNonce), waitNonce, phaseTitle);
+      res = await relay(`wait ${name} r${round}`, waitCommand(cfg.rs, cfg.repo, cfg.slug, cfg.cp, res.job, waitNonce), waitNonce, phaseTitle);
     }
     const verdict = gateVerdict(res);
     log(`${name} round ${round}: ${verdict}. ${clip(res.summary, 120)}`);
@@ -537,7 +541,7 @@ async function run(cfg) {
     phase(P.pre);
     nonceCount += 1;
     const stateNonce = makeNonce(cfg.nonce, nonceCount);
-    const state = await relay("state", stateCommand(cfg.rs, cfg.slug, cfg.cp, stateNonce), stateNonce, P.pre);
+    const state = await relay("state", stateCommand(cfg.rs, cfg.repo, cfg.slug, cfg.cp, stateNonce), stateNonce, P.pre);
     const check = checkState(state, cfg);
     if (!check.ok)
       throw stop("harness-error", check.reason);

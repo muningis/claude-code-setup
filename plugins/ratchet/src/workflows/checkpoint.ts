@@ -209,7 +209,7 @@ function agentOpts(
 
 function relayPrompt(cfg: Config, command: string): string {
   return [
-    `Run this one command from ${cfg.repo}. It prints one JSON object.`,
+    'Run this one command exactly as written, as one Bash call. Do not cd first, and add no prefix, pipe or redirect. The command names its repo with --root and prints one JSON object.',
     'Return {"raw": "<the JSON text it printed>"}: the exact text, with no field changed, added or dropped. Do not summarise it.',
     "Give the Bash call a timeout of 600000 ms. Exit codes 1 and 2 are normal. Run nothing else.",
     "",
@@ -369,14 +369,14 @@ async function run(cfg: Config): Promise<Result> {
   ) => {
     nonceCount += 1;
     const nonce = makeNonce(cfg.nonce, nonceCount);
-    const command = gateCommand(cfg.rs, name, cfg.slug, cfg.cp, nonce, round, [...(opts.extra || []), "--detach"]);
+    const command = gateCommand(cfg.rs, cfg.repo, name, cfg.slug, cfg.cp, nonce, round, [...(opts.extra || []), "--detach"]);
     let res = await relay(`gate ${name} r${round}`, command, nonce, phaseTitle);
     for (let waits = 0; gateVerdict(res) === "pending"; waits++) {
       if (waits >= MAX_WAITS) throw stop("harness-error", `The ${name} gate still runs after ${waits} waits.`);
       if (!isSafeJob(res.job)) throw stop("harness-error", `The ${name} gate returned a bad job ID.`);
       nonceCount += 1;
       const waitNonce = makeNonce(cfg.nonce, nonceCount);
-      res = await relay(`wait ${name} r${round}`, waitCommand(cfg.rs, cfg.slug, cfg.cp, res.job, waitNonce), waitNonce, phaseTitle);
+      res = await relay(`wait ${name} r${round}`, waitCommand(cfg.rs, cfg.repo, cfg.slug, cfg.cp, res.job, waitNonce), waitNonce, phaseTitle);
     }
     const verdict = gateVerdict(res);
     log(`${name} round ${round}: ${verdict}. ${clip(res.summary, 120)}`);
@@ -391,7 +391,7 @@ async function run(cfg: Config): Promise<Result> {
     phase(P.pre);
     nonceCount += 1;
     const stateNonce = makeNonce(cfg.nonce, nonceCount);
-    const state = await relay("state", stateCommand(cfg.rs, cfg.slug, cfg.cp, stateNonce), stateNonce, P.pre);
+    const state = await relay("state", stateCommand(cfg.rs, cfg.repo, cfg.slug, cfg.cp, stateNonce), stateNonce, P.pre);
     const check = checkState(state, cfg);
     if (!check.ok) throw stop("harness-error", check.reason);
     if (typeof state.epoch === "number") epoch = state.epoch;

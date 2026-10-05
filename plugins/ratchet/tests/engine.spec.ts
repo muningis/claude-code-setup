@@ -8,6 +8,9 @@ import {
   parseRelay,
   resolveCaps,
   skipArch,
+  stateCommand,
+  gateCommand,
+  waitCommand,
   stagesFrom,
   verifyRelay,
 } from "../src/engine/decide";
@@ -115,5 +118,20 @@ describe("stages", () => {
     expect(stagesFrom("B5", true)).toBeNull();
     expect(stagesFrom("done", false)).toBeNull();
     expect(stagesFrom(undefined, false)).toBeNull();
+  });
+});
+
+describe("RS commands", () => {
+  const rs = "bash /p/ratchet.sh";
+  test("each builder ends with --root <repo>, after the subcommand", () => {
+    expect(stateCommand(rs, "/r", "s", "cp2", "n1")).toBe(`${rs} state s cp2 --nonce n1 --root /r`);
+    expect(gateCommand(rs, "/r", "b1", "s", "cp2", "n1", 2, ["--detach"])).toBe(
+      `${rs} gate b1 s cp2 --nonce n1 --round 2 --detach --root /r`,
+    );
+    expect(waitCommand(rs, "/r", "s", "cp2", "job-1", "n1")).toBe(`${rs} wait s cp2 job-1 --nonce n1 --timeout 480 --root /r`);
+  });
+  test("the path is quoted only when it has unsafe characters", () => {
+    expect(stateCommand(rs, "/a b/it's", "s", "cp2", "n1")).toBe(`${rs} state s cp2 --nonce n1 --root '/a b/it'\\''s'`);
+    expect(stateCommand(rs, "/Users/me/repo_1.x-y", "s", "cp2", "n1")).toEndWith(" --root /Users/me/repo_1.x-y");
   });
 });
