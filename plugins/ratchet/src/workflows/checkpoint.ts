@@ -235,7 +235,7 @@ function specPrompt(cfg: Config, ev: string, round: number, out: string, retry: 
       retry.evidence ? `The spec gate failed. Read ${retry.evidence} and fix the spec.` : "The spec gate failed. Fix the spec.",
     );
   }
-  lines.push(`Write your JSON output to ${out}.`);
+  lines.push(`First write your JSON output to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join("\n");
 }
 
@@ -252,7 +252,7 @@ function implementPrompt(cfg: Config, ev: string, round: number, spec: string, o
     if (fix.path) lines.push(`${fix.label}: ${fix.path}`);
     if (fix.summary) lines.push(`Last gate result: ${fix.summary}`);
   }
-  lines.push(`Write your JSON output to ${out}.`);
+  lines.push(`First write your JSON output to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join("\n");
 }
 
@@ -273,7 +273,7 @@ function visualPrompt(cfg: Config, ev: string, round: number, images: string[], 
   ];
   if (images.length > 0) lines.push("Images:", ...images);
   if (capture) lines.push(`Capture evidence: ${capture}`);
-  lines.push(`Write your JSON output to ${out}.`);
+  lines.push(`First write your JSON output to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join("\n");
 }
 
@@ -293,7 +293,7 @@ function reviewPrompt(cfg: Config, ev: string, role: string, round: number, inpu
   if (input.tripwire) lines.push(`Tripwire output: ${input.tripwire}`);
   if (input.checks.length > 0) lines.push(`Check outputs: ${input.checks.join(", ")}`);
   if (input.concerns) lines.push(`Implementer concerns to check: ${input.concerns}`);
-  lines.push(`Write your verdict to ${out}.`);
+  lines.push(`First write your verdict to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join("\n");
 }
 

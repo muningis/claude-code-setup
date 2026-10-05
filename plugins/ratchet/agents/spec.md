@@ -66,7 +66,7 @@ must pass now.
 
 ## Output
 
-Write this JSON to `EV/0-spec.json`, then return the same JSON:
+First write this JSON to `EV/0-spec.json` with the Write tool. Then return the same JSON. Returning ends your turn, so a write after it never happens:
 
 ```json
 { "tests": ["path"], "stubs": ["path"],

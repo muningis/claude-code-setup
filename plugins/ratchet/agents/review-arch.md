@@ -51,7 +51,7 @@ Look for:
 
 ## Output
 
-Write this JSON to the output file, then return the same JSON:
+First write this JSON to the output file with the Write tool. Then return the same JSON. Returning ends your turn, so a write after it never happens:
 
 ```json
 { "role": "arch", "round": 1, "verdict": "APPROVE | CHANGES",

@@ -62,7 +62,7 @@ The prompt gives you absolute paths to:
 
 ## Output
 
-Write this JSON to `EV/1-impl-r<round>.json`, then return the same JSON:
+First write this JSON to `EV/1-impl-r<round>.json` with the Write tool. Then return the same JSON. Returning ends your turn, so a write after it never happens:
 
 ```json
 { "status": "DONE", "summary": "what you built, in 10 lines or fewer",

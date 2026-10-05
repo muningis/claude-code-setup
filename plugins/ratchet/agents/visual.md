@@ -45,7 +45,7 @@ the design rules in `architecture.md`. Say so in `note`. This check is weaker.
 
 ## Output
 
-Write this JSON to the output file, then return the same JSON:
+First write this JSON to the output file with the Write tool. Then return the same JSON. Returning ends your turn, so a write after it never happens:
 
 ```json
 { "verdict": "PASS | FAIL | INVALID", "oracle": "reference | none", "note": "",

@@ -414,7 +414,7 @@ function specPrompt(cfg, ev, round, out, retry) {
   if (retry) {
     lines.push(retry.evidence ? `The spec gate failed. Read ${retry.evidence} and fix the spec.` : "The spec gate failed. Fix the spec.");
   }
-  lines.push(`Write your JSON output to ${out}.`);
+  lines.push(`First write your JSON output to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join(`
 `);
 }
@@ -433,7 +433,7 @@ function implementPrompt(cfg, ev, round, spec, out, fix) {
     if (fix.summary)
       lines.push(`Last gate result: ${fix.summary}`);
   }
-  lines.push(`Write your JSON output to ${out}.`);
+  lines.push(`First write your JSON output to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join(`
 `);
 }
@@ -453,7 +453,7 @@ function visualPrompt(cfg, ev, round, images, capture, out) {
     lines.push("Images:", ...images);
   if (capture)
     lines.push(`Capture evidence: ${capture}`);
-  lines.push(`Write your JSON output to ${out}.`);
+  lines.push(`First write your JSON output to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join(`
 `);
 }
@@ -479,7 +479,7 @@ function reviewPrompt(cfg, ev, role, round, input, out) {
     lines.push(`Check outputs: ${input.checks.join(", ")}`);
   if (input.concerns)
     lines.push(`Implementer concerns to check: ${input.concerns}`);
-  lines.push(`Write your verdict to ${out}.`);
+  lines.push(`First write your verdict to ${out} with the Write tool. Then return it. Returning ends your turn, so a write after it never happens.`);
   return lines.join(`
 `);
 }

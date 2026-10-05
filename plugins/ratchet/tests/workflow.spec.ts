@@ -378,7 +378,9 @@ describe("checkpoint workflow", () => {
     expect(arch[0].prompt).not.toContain("Your previous verdict");
     expect(brk[1].prompt).toContain(`Delta since the last review: /repo/${EV}/3-delta-r2.diff`);
     expect(brk[1].prompt).toContain(`Your previous verdict: /repo/${EV}/3-break-r1.json`);
-    expect(brk[1].prompt).toContain(`Write your verdict to /repo/${EV}/3-break-r2.json.`);
+    expect(brk[1].prompt).toContain(`First write your verdict to /repo/${EV}/3-break-r2.json with the Write tool.`);
+    // A structured return ends the agent's turn, so a reviewer that returns first never writes the file b3 reads.
+    for (const c of [...arch, ...brk]) expect(c.prompt).toContain("Returning ends your turn");
     expect(calls.find((c) => c.type === "ratchet:implement")!.prompt).toContain(
       `Findings: /repo/${EV}/3-triage-r1.json`,
     );
