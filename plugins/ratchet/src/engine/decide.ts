@@ -184,12 +184,19 @@ export function checkState(state: any, want: { slug: string; cp: string }): { ok
   return { ok: true, reason: "" };
 }
 
-export function stateCommand(rs: string, slug: string, cp: string, nonce: string): string {
-  return `${rs} state ${slug} ${cp} --nonce ${nonce}`;
+// --root goes last, so the user's sandbox exclusion `<rs> gate *` still matches the command.
+export function rootArg(repo: string): string {
+  const path = /^[A-Za-z0-9_./-]+$/.test(repo) ? repo : `'${repo.replace(/'/g, `'\\''`)}'`;
+  return ` --root ${path}`;
+}
+
+export function stateCommand(rs: string, repo: string, slug: string, cp: string, nonce: string): string {
+  return `${rs} state ${slug} ${cp} --nonce ${nonce}${rootArg(repo)}`;
 }
 
 export function gateCommand(
   rs: string,
+  repo: string,
   gate: string,
   slug: string,
   cp: string,
@@ -199,7 +206,7 @@ export function gateCommand(
 ): string {
   const flag = round === null ? "" : ` --round ${round}`;
   const more = extra.length > 0 ? ` ${extra.join(" ")}` : "";
-  return `${rs} gate ${gate} ${slug} ${cp} --nonce ${nonce}${flag}${more}`;
+  return `${rs} gate ${gate} ${slug} ${cp} --nonce ${nonce}${flag}${more}${rootArg(repo)}`;
 }
 
 // The runtime may offer neither btoa nor Buffer, so this encodes UTF-8 to base64 by hand. The b2 gate
@@ -280,8 +287,8 @@ export function gateVerdict(res: any): "pass" | "fail" | "error" | "pending" {
 export const WAIT_SECONDS = 480;
 export const MAX_WAITS = 15;
 
-export function waitCommand(rs: string, slug: string, cp: string, job: string, nonce: string): string {
-  return `${rs} wait ${slug} ${cp} ${job} --nonce ${nonce} --timeout ${WAIT_SECONDS}`;
+export function waitCommand(rs: string, repo: string, slug: string, cp: string, job: string, nonce: string): string {
+  return `${rs} wait ${slug} ${cp} ${job} --nonce ${nonce} --timeout ${WAIT_SECONDS}${rootArg(repo)}`;
 }
 
 // The job ID comes back from a relay and goes into the next shell command.

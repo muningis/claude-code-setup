@@ -299,8 +299,31 @@ describe("checkpoint workflow", () => {
     expect(result.status).toBe("ready-for-B4");
     const waits = calls.filter((c) => c.name === "wait");
     expect(waits).toHaveLength(2);
-    expect(waits[0].prompt).toContain("wait s cp2 b1-r1-n1-2 --nonce n1-3 --timeout 480");
+    expect(waits[0].prompt).toContain("wait s cp2 b1-r1-n1-2 --nonce n1-3 --timeout 480 --root /repo");
     expect(calls.find((c) => c.name === "gate b1")?.prompt).toContain("--detach");
+  });
+
+  test("every relay prompt says not to cd, and every command ends with --root <repo>", async () => {
+    const { calls } = await dryRun({
+      state: stateAt("B0"),
+      gates: {
+        "b0-prep": {},
+        b0: { summary: "6 cases" },
+        b1: { summary: "12 checks pass" },
+        smoke: {},
+        "b3-prep": { patch: `${EV}/3-patch-r1.diff`, structural: true },
+        b3: { summary: "no blocking findings" },
+      },
+      agents: { "ratchet:spec": SPEC_OK, "ratchet:implement": IMPL_OK, "ratchet:review-arch": review("arch"), "ratchet:review-break": review("break") },
+    });
+    const relays = calls.filter((c) => c.type === "ratchet:relay");
+    expect(relays.length).toBeGreaterThan(2);
+    for (const c of relays) {
+      expect(c.prompt).not.toMatch(/from \/repo/);
+      expect(c.prompt).toContain("Do not cd first");
+      const command = c.prompt.split("\n").find((l) => l.startsWith(ARGS.rs))!;
+      expect(command.endsWith(" --root /repo")).toBe(true);
+    }
   });
 
   test("a relay that answers with the wrong nonce is a harness error", async () => {

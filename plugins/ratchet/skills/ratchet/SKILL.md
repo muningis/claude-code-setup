@@ -54,7 +54,8 @@ as `references/dream.md` says in "Review". Then continue with the request. Skip 
 8. **The human gate is free text.** Do not use AskUserQuestion for it. Do not offer
    pass/fail options.
 9. **No `cd`.** Use absolute paths. Write the full `RS` command each time. Never keep it
-   in a shell variable, because zsh does not split it.
+   in a shell variable, because zsh does not split it. Pass `--root <repo>` when the
+   session is not in the repo.
 10. **Keep the lead thin.** The engine runs gates B0 to B3. Read `RS` summaries. Open an
     evidence file only when you must decide something.
 

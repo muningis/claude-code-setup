@@ -124,6 +124,24 @@ need_tree() {
   git cat-file -e "$1^{tree}" 2>/dev/null || die "unknown tree: $1 (garbage-collected, or from another clone?)"
 }
 
+# Sandbox exclusions match only a bare command, so a caller cannot `cd` first: --root does it.
+# Scan stops at `--`, so the flags of an `exec -- <cmd>` stay intact.
+args=(); root=''; seen_dd=0
+while [ $# -gt 0 ]; do
+  if [ "$seen_dd" = 0 ] && [ "$1" = "--root" ]; then
+    [ $# -ge 2 ] || die "--root needs a directory"
+    root=$2; shift 2; continue
+  fi
+  [ "$1" = "--" ] && seen_dd=1
+  args+=("$1"); shift
+done
+if [ -n "$root" ]; then
+  [ -d "$root" ] || die "--root is not a directory: $root"
+  cd "$root"
+fi
+# ${args[@]+...} keeps an empty array safe under set -u in bash 3.2.
+set -- ${args[@]+"${args[@]}"}
+
 cmd=${1:-}; shift || true
 case "$cmd" in
   snap)

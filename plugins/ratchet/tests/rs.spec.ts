@@ -862,3 +862,28 @@ t('b3 rejects a bad --arch-b64 and keeps the missing-file error without a copy',
   review(repo2, 'arch', 1, [])
   expect(gate(repo2, 'b3').json.summary).toContain('missing 3-break-r1.json')
 })
+
+t('--root runs the command in that repo from a folder outside any repo', () => {
+  const repo = makeRepo()
+  const outside = mkdtempSync(join(tmpdir(), 'rs-out-'))
+  repos.push(outside)
+  const r = sh(outside, ['bash', RS_SH, 'config', '--root', repo])
+  expect(r.code).toBe(0)
+  expect(JSON.parse(r.out).version).toBe(2)
+  const s = sh(outside, ['bash', RS_SH, '--root', repo, 'state', 'demo', 'cp1'])
+  expect(parse(s.out).slug).toBe('demo')
+})
+
+t('--root after -- belongs to the command that exec runs', () => {
+  const repo = makeRepo()
+  const r = sh(repo, ['bash', RS_SH, 'exec', '--timeout', '5', '--', 'sh', '-c', 'echo "$@"', 'x', '--root', '/nonexistent'])
+  expect(r.code).toBe(0)
+  expect(r.out).toContain('--root /nonexistent')
+})
+
+t('--root with a missing directory is an error with exit code 2', () => {
+  const repo = makeRepo()
+  const r = sh(repo, ['bash', RS_SH, 'config', '--root', join(repo, 'nope')])
+  expect(r.code).toBe(2)
+  expect(r.err).toContain('--root is not a directory')
+})
