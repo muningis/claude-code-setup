@@ -15,8 +15,14 @@ const MARKER = /^\[ratchet\] baton (.+\/\.claude\/handovers\/ratchet-([A-Za-z0-9
 // that way). The slug alone names the file, relative to the session folder.
 const SHORT_MARKER = /^\[ratchet\] baton (?:ratchet-)?([A-Za-z0-9._-]+?)(?:\.md)? (continue|stop)\s*$/m
 const MAX_RELAYS = 30 // per session: a run that keeps relaying without ending is a loop
+// The lead's own `RS baton` call. Its output holds the full marker, printed by code. A lead
+// that then shortens the marker in its answer (a real one wrote `[ratchet] baton continue`,
+// then copied that form for four more checkpoints) still hands over.
+const BATON_RUN = /ratchet\.sh['"]?\s+baton\s+\S+\s+(?:continue|stop)\b/
 
-export function parseMarker(answer: string): { path: string; slug: string; how: string } | null {
+type Hit = { path: string; slug: string; how: string }
+
+export function parseMarker(answer: string): Hit | null {
   // Markdown can wrap the line in backticks.
   const text = answer.replace(/`/g, '')
   const full = MARKER.exec(text)
@@ -33,6 +39,7 @@ const DREAM_PENDING = '.claude/ratchet/dreams/pending.json'
 
 // Module state: a hot reload drops it, which at worst skips one reset.
 let pending: string | null = null // the baton the next compaction installs
+let armed: Hit | null = null // what RS baton printed in this main-loop turn, or what a nudge waits on
 let lastBaton = ''
 let nudged = '' // the baton whose leftover agents were already asked to stop
 let relays = 0
@@ -40,6 +47,14 @@ let poll: Timer | undefined
 let shown: string | undefined // the status line this mod set; none yet
 
 const isRatchet = (command: string) => command === 'ratchet' || command.endsWith(':ratchet')
+
+/** The marker in a Bash result, from its stdout or its text. */
+function batonPrinted(result: unknown): Hit | null {
+  const r = result as { result?: { stdout?: unknown }; text?: unknown } | null
+  const out = [r?.result?.stdout, r?.text].filter((s): s is string => typeof s === 'string').join('\n')
+  const full = MARKER.exec(out)
+  return full ? { path: full[1]!, slug: full[2]!, how: full[3]! } : null
+}
 
 async function relayOn($: $) {
   try {
@@ -148,6 +163,12 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
+  on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
+    const result = await next(e)
+    if (!e.agentId && BATON_RUN.test(e.command)) armed = batonPrinted(result)
+    return result
+  })
+
   // The flag that tells the skill to hand over: present only when this mod is.
   on('command.run', async ($, e, next) => {
     if (!isRatchet(e.command) || !/^\s*run\b/.test(e.args) || /(^|\s)--relay\b/.test(e.args)) return next(e)
@@ -165,8 +186,11 @@ export const register: Register = (on, options) => {
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
     await refreshStatus($)
-    if (e.agentId || e.reason !== 'answer') return result
-    const hit = parseMarker(e.answer)
+    if (e.agentId) return result
+    // What RS baton printed comes first; the answer's own marker is the fallback. A turn that
+    // the human stopped hands nothing over.
+    const hit = e.reason === 'answer' ? (armed ?? parseMarker(e.answer)) : null
+    armed = null
     if (!hit) return result
     const { path, slug, how } = hit
     let baton: string
@@ -183,8 +207,10 @@ export const register: Register = (on, options) => {
     }
     const left = await leftovers($)
     if (left.length > 0 && nudged !== key) {
-      // Once per baton; the repeated marker then relays, so it isn't a loop.
+      // Once per baton; the repeated marker then relays, so it isn't a loop. The reply to the
+      // nudge relays this baton, whatever form its marker takes.
       nudged = key
+      armed = hit
       const text = `[ratchet relay] Before the reset, stop these with TaskStop: ${left.join(', ')}. Then end your turn with the same baton marker line.`
       $.clock.after(250, () => void $.prompt.submit({ text }))
       return result

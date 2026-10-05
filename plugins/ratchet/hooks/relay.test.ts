@@ -62,6 +62,12 @@ function stage(engine: Engine, on: On, files: Record<string, string> = {}) {
 const mainTurn = ($: Engine, answer: string, extra: object = {}) =>
   $.turn.complete({ answer, durationMs: 1000, isAborted: false, turnId: 't', reason: 'answer', ...extra } as never)
 
+// The lead's own `RS baton` call: the script prints the full marker, whatever the answer says later.
+const BATON_RUN = 'bash /plugin/skills/ratchet/scripts/ratchet.sh baton slugify continue "/ratchet run slugify --auto"'
+function rsPrints(on: On, stdout: string) {
+  on('tool.call', () => ({ result: { stdout, stderr: '', interrupted: false }, text: stdout }) as never)
+}
+
 describe('the relay', () => {
   test('continue: resets the context to the baton, then starts the next run', async ($, on) => {
     const { seen, settle } = stage($, on, { [PATH]: BATON('cp3') })
@@ -87,6 +93,28 @@ describe('the relay', () => {
     await settle()
     expect(seen.installed.length).toBe(1)
     expect(seen.runs).toEqual(['ratchet run slugify --auto --relay'])
+  })
+
+  test('the marker that RS baton printed resets the context, even when the answer shortens it', async ($, on) => {
+    // A real lead wrote `[ratchet] baton continue` four times in a row, and no reset happened.
+    const { seen, settle } = stage($, on, { [PATH]: BATON('cp3') })
+    rsPrints(on, `[ratchet] baton ${PATH} continue\n`)
+    await $.tool.call({ tool: 'Bash', command: BATON_RUN })
+    await mainTurn($, 'cp2 locked. Next is cp3.\n\n[ratchet] baton continue')
+    await settle()
+    expect(seen.installed.length).toBe(1)
+    expect(seen.runs).toEqual(['ratchet run slugify --auto --relay'])
+  })
+
+  test('a turn that the human interrupts after RS baton hands nothing over, and the next turn neither', async ($, on) => {
+    const { seen, settle } = stage($, on, { [PATH]: BATON('cp3') })
+    rsPrints(on, `[ratchet] baton ${PATH} continue\n`)
+    await $.tool.call({ tool: 'Bash', command: BATON_RUN })
+    await mainTurn($, 'stopped', { reason: 'aborted', isAborted: true })
+    await mainTurn($, 'What should I do next?')
+    await settle()
+    expect(seen.installed).toEqual([])
+    expect(seen.runs).toEqual([])
   })
 
   test('ignores answers without the marker, subagent turns and aborted turns', async ($, on) => {
@@ -137,6 +165,22 @@ describe('leftover agents', () => {
     await mainTurn($, `[ratchet] baton ${PATH} continue`)
     await settle()
     expect(seen.prompts.length).toBe(1)
+    expect(seen.installed.length).toBe(1)
+    expect(seen.runs).toEqual(['ratchet run slugify --auto --relay'])
+  })
+
+  test('after the nudge, a shortened marker still relays the baton that RS printed', async ($, on) => {
+    const { seen, settle, agents } = stage($, on, { [PATH]: BATON('cp3') })
+    agents.push(agent('impl-slugify-cp2', 'ratchet:implement'))
+    rsPrints(on, `[ratchet] baton ${PATH} continue\n`)
+    await $.tool.call({ tool: 'Bash', command: BATON_RUN })
+    await mainTurn($, '[ratchet] baton continue')
+    await settle()
+    expect(seen.prompts).toEqual([expect.stringMatching(/TaskStop: impl-slugify-cp2/)])
+
+    agents.forEach(a => (a.status = 'killed'))
+    await mainTurn($, 'Stopped it.\n[ratchet] baton continue')
+    await settle()
     expect(seen.installed.length).toBe(1)
     expect(seen.runs).toEqual(['ratchet run slugify --auto --relay'])
   })

@@ -109,8 +109,10 @@ Do not add a rule that exists already. Then lock the learnings again with
      `RS baton <slug> continue|stop "<start>" ["<line>"...]`. Use `continue` under
      `--auto`, else `stop`. `<start>` is the resume command and the next step. Each
      `<line>` is something that is not on disk: a standing order, or an open decision.
-     End your turn with the marker line that `RS baton` prints. Copy it exactly, on a
-     line of its own.
+     - End your turn with the marker line that `RS baton` prints. Copy it exactly, on a
+       line of its own.
+     - The relay mod also reads the marker from the output of `RS baton`. Thus `RS baton`
+       must be the last command of the turn. After it, ask nothing.
    - With `relay` off: interactive, name the next row and stop. Under `--auto`, go to
      step 3 for the next row.
 
