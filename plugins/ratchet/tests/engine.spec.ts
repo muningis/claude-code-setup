@@ -9,6 +9,7 @@ import {
   resolveCaps,
   skipArch,
   stagesFrom,
+  utf8Base64,
   verifyRelay,
 } from "../src/engine/decide";
 
@@ -115,5 +116,13 @@ describe("stages", () => {
     expect(stagesFrom("B5", true)).toBeNull();
     expect(stagesFrom("done", false)).toBeNull();
     expect(stagesFrom(undefined, false)).toBeNull();
+  });
+});
+
+describe("utf8Base64", () => {
+  test("matches Buffer for ASCII, multi-byte text and every padding length", () => {
+    for (const text of ["", "a", "ab", "abc", "abcd", "ünï — title", "日本語", "😀 emoji", '{"verdict":"PASS"}\n']) {
+      expect(utf8Base64(text)).toBe(Buffer.from(text, "utf8").toString("base64"));
+    }
   });
 });

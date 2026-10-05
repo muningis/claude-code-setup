@@ -1,4 +1,4 @@
-"""gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--detach]: run one gate; update STATE, LIVE and METRICS."""
+"""gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--detach] [--verdict-b64 <b64>]: run one gate; update STATE, LIVE and METRICS."""
 from __future__ import annotations
 
 import os
@@ -33,6 +33,8 @@ ROUND_KEY = {"b0-prep": None, "b0": "b0", "b1": "b1", "b2-capture": "b2", "b2": 
              "b3-prep": "b3", "b3": "b3"}
 LIVE_GATE = {"b0-prep": "B0", "b0": "B0", "b1": "B1", "b2-capture": "B2", "b2": "B2", "smoke": "B1",
              "b3-prep": "B3", "b3": "B3"}
+# Gates that precede agent work: the human adds notes (waivers) after b0-prep wrote context.md.
+REFRESH_CONTEXT = ("b1", "b2-capture", "b3-prep")
 REVIEW = ["arch", "break"]
 # gate: (the roles that work next after a pass, after a fail). None leaves LIVE.roles as it is.
 NEXT_ROLES = {
@@ -107,7 +109,7 @@ def start_job(root, slug, cp, gate, rnd, nonce, argv):
 def main(argv):
     started = time.time()
     try:
-        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--round"),
+        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--round", "--verdict-b64"),
                                       bool_flags=("--skip-arch", "--detach"))
     except RsError as e:
         return common.emit("gate", "error", str(e), harness_error=str(e))
@@ -137,8 +139,11 @@ def main(argv):
             return start_job(root, slug, row["id"], gate, rnd, nonce, argv)
         ctx = Ctx(root, cfg, slug, plan, row, state, rnd, nonce, gate)
         ctx.skip_arch = bool(opts.get("--skip-arch"))
+        ctx.verdict_b64 = opts.get("--verdict-b64")
         common.live_update(root, slug=slug, cp=row["id"], gate=LIVE_GATE[gate], round=rnd)
         try:
+            if gate in REFRESH_CONTEXT and os.path.isfile(ctx.evp("context.md")):
+                gate_b0.write_context(ctx)
             res = RUNNERS[gate](ctx)
         except RsError as e:
             res = Result("error", str(e))

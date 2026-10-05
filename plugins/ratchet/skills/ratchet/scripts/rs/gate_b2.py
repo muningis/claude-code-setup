@@ -1,7 +1,10 @@
 """Gates b2-capture and b2: take the images, then apply the visual judgment to its findings."""
 from __future__ import annotations
 
+import base64
+import binascii
 import filecmp
+import json
 import os
 import shlex
 import shutil
@@ -204,6 +207,16 @@ def run_judge(ctx):
         return not_applicable(ctx, "2-triage-r%d.json" % ctx.round,
                               {"blocking": [], "advisory": [], "engine": 0})
     src = ctx.evp("2-visual-r%d.json" % ctx.round)
+    if not os.path.isfile(src) and ctx.verdict_b64:
+        # The visual agent sometimes returns its verdict without writing the file; the engine hands it over here.
+        try:
+            text = base64.b64decode(ctx.verdict_b64, validate=True).decode("utf-8")
+            data = json.loads(text)
+        except (binascii.Error, ValueError) as e:
+            raise RsError("--verdict-b64 is not base64 of JSON: %s" % e)
+        if not isinstance(data, dict):
+            raise RsError("--verdict-b64 must hold a JSON object")
+        common.write_text(src, text)
     if not os.path.isfile(src):
         raise RsError("missing 2-visual-r%d.json" % ctx.round)
     data = common.read_json(src)

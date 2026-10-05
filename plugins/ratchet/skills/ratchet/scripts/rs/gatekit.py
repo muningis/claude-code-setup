@@ -27,6 +27,7 @@ class Ctx(object):
         self._base = None
         self._changed = None
         self.skip_arch = False
+        self.verdict_b64 = None  # b2 only: the visual agent's verdict, for when it wrote no file
 
     def evp(self, name):
         return os.path.join(self.ev, name)

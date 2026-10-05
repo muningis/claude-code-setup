@@ -148,6 +148,29 @@ function gateCommand(rs, gate, slug, cp, nonce, round, extra = []) {
   const more = extra.length > 0 ? ` ${extra.join(" ")}` : "";
   return `${rs} gate ${gate} ${slug} ${cp} --nonce ${nonce}${flag}${more}`;
 }
+function utf8Base64(text) {
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const bytes = [];
+  for (const ch of text) {
+    const c = ch.codePointAt(0);
+    if (c < 128)
+      bytes.push(c);
+    else if (c < 2048)
+      bytes.push(192 | c >> 6, 128 | c & 63);
+    else if (c < 65536)
+      bytes.push(224 | c >> 12, 128 | c >> 6 & 63, 128 | c & 63);
+    else
+      bytes.push(240 | c >> 18, 128 | c >> 12 & 63, 128 | c >> 6 & 63, 128 | c & 63);
+  }
+  let out = "";
+  for (let i = 0;i < bytes.length; i += 3) {
+    const n = bytes[i] << 16 | (bytes[i + 1] || 0) << 8 | (bytes[i + 2] || 0);
+    out += abc[n >> 18] + abc[n >> 12 & 63];
+    out += i + 1 < bytes.length ? abc[n >> 6 & 63] : "=";
+    out += i + 2 < bytes.length ? abc[n & 63] : "=";
+  }
+  return out;
+}
 function makeNonce(base, counter) {
   return `${base}-${counter}`;
 }
@@ -622,7 +645,7 @@ async function run(cfg) {
         const visual = await agent(visualPrompt(cfg, evDir, r, imageLines(cfg.repo, capture.res.images), pathOrNull(capture.res.evidence), evAbs(`2-visual-r${r}.json`)), agentOpts("ratchet:visual", `visual r${r}`, P.b2, VISUAL_SCHEMA, cfg.models.visual));
         if (!visual)
           throw stop("harness-error", "The visual agent returned nothing.");
-        g = await gate("b2", r, P.b2, { tolerate: isInvalidCapture });
+        g = await gate("b2", r, P.b2, { tolerate: isInvalidCapture, extra: ["--verdict-b64", utf8Base64(JSON.stringify(visual))] });
         if (!g.error)
           break;
         if (attempt === INVALID_RECAPTURES)

@@ -202,6 +202,28 @@ export function gateCommand(
   return `${rs} gate ${gate} ${slug} ${cp} --nonce ${nonce}${flag}${more}`;
 }
 
+// The runtime may offer neither btoa nor Buffer, so this encodes UTF-8 to base64 by hand. The b2 gate
+// takes the visual agent's verdict this way: base64 needs no shell quoting.
+export function utf8Base64(text: string): string {
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  const bytes: number[] = [];
+  for (const ch of text) {
+    const c = ch.codePointAt(0) as number;
+    if (c < 0x80) bytes.push(c);
+    else if (c < 0x800) bytes.push(0xc0 | (c >> 6), 0x80 | (c & 63));
+    else if (c < 0x10000) bytes.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+    else bytes.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
+  }
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const n = (bytes[i] << 16) | ((bytes[i + 1] || 0) << 8) | (bytes[i + 2] || 0);
+    out += abc[n >> 18] + abc[(n >> 12) & 63];
+    out += i + 1 < bytes.length ? abc[(n >> 6) & 63] : "=";
+    out += i + 2 < bytes.length ? abc[n & 63] : "=";
+  }
+  return out;
+}
+
 // Deterministic on purpose. The runtime forbids clock and random calls, and a resume
 // replays cached relay results only when the prompts are identical. Pass a new base
 // nonce for each run that must execute its gates again.

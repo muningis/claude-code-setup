@@ -1,7 +1,7 @@
 {
   "name": "ratchet",
   "displayName": "Ratchet",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "description": "Plan-and-verify workflow. Grill the goal, write a PRD, spec and design log, roast the plan, then push small checkpoints through a deterministic engine: red tests, behaviour, visual, two blind reviewers whose findings block only with a proof or a rule ID, and your approval. Also fix, verify, handover/resume and why flows, STE-lite document checks, and a nightly dream that reads all your sessions and proposes rules for you to approve.",
   "author": {
     "name": "muningis",

@@ -189,6 +189,26 @@ describe("checkpoint workflow", () => {
     expect(calls.every((c) => titles.includes(c.opts.phase))).toBe(true);
   });
 
+  test("the b2 gate carries the visual agent's verdict as --verdict-b64", async () => {
+    const verdict = { verdict: "FAIL", differences: [{ id: "cp2-V1-1", kind: "text", element: "ünï — title" }] };
+    const { calls } = await dryRun({
+      state: stateAt("B2", { visual: true }),
+      gates: {
+        "b2-capture": { verdict: "fail", summary: "images differ", images: [], evidence: `${EV}/2-capture-r1.json` },
+        b2: { summary: "no blocking differences", evidence: `${EV}/2-triage-r1.json` },
+        "b3-prep": { patch: `${EV}/3-patch-r1.diff`, evidence: `${EV}/3-patch-r1.diff`, checkOutputs: [], structural: true },
+        b3: { summary: "no blocking findings", evidence: `${EV}/3-triage-r1.json` },
+      },
+      agents: { "ratchet:visual": verdict, "ratchet:review-arch": review("arch"), "ratchet:review-break": review("break") },
+    });
+    const b2 = calls.find((c) => c.name === "gate b2");
+    const b64 = b2!.prompt.match(/ --verdict-b64 (\S+)/)?.[1];
+    expect(b64).toBeDefined();
+    expect(JSON.parse(Buffer.from(b64!, "base64").toString("utf8"))).toEqual(verdict);
+    // The capture gate runs before the agent and has nothing to carry.
+    expect(calls.find((c) => c.name === "gate b2-capture")!.prompt).not.toContain("--verdict-b64");
+  });
+
   test("SPEC_CONFLICT asks for a decision before any gate runs", async () => {
     const { result, calls } = await dryRun({
       state: stateAt("B1"),

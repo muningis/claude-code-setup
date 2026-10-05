@@ -162,6 +162,9 @@ file. Gate `b0` needs the base, because it finds the spec set as the files chang
    - the plan path, the row, and its lines from `## Notes` (scope, done when, waivers)
    - the change documents and the architecture path
    - the test commands, the test budget and the visual tolerance
+
+   `b1`, `b2-capture` and `b3-prep` write the file again when it exists, so a waiver that
+   the human adds after B0 reaches the agents.
 6. Write `EV/learnings.md`: all active learnings, and the text outside the entries.
 7. Write `LIVE` with `active: true`.
 
@@ -236,7 +239,10 @@ Added fields:
 
 ### `b2`: after the visual judgment
 
-The gate reads `EV/2-visual-r<r>.json` in the visual schema below. It applies
+The gate reads `EV/2-visual-r<r>.json` in the visual schema below. If the file is missing,
+`--verdict-b64 <base64 of the verdict JSON>` supplies it: the gate validates it as a JSON
+object and writes the file. An existing file wins. The engine passes the visual agent's
+returned object this way. It applies
 `visual.tolerance` (see `config.md`). It also reads `EV/2-capture-r<r>.json`: each target
 in `regressChanged` without a waiver blocks, with the ID `<cp>-V<r>-<100+n>` and the kind
 `regression`.

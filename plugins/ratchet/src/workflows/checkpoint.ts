@@ -43,6 +43,7 @@ import {
   stagesFrom,
   stateCommand,
   stateRounds,
+  utf8Base64,
   verifyRelay,
 } from "../engine/decide";
 import type { Config, Result, Rounds, Status } from "../engine/decide";
@@ -492,7 +493,8 @@ async function run(cfg: Config): Promise<Result> {
           agentOpts("ratchet:visual", `visual r${r}`, P.b2, VISUAL_SCHEMA, cfg.models.visual),
         );
         if (!visual) throw stop("harness-error", "The visual agent returned nothing.");
-        g = await gate("b2", r, P.b2, { tolerate: isInvalidCapture });
+        // The agent sometimes returns its verdict and skips the file. The gate writes the file from this copy.
+        g = await gate("b2", r, P.b2, { tolerate: isInvalidCapture, extra: ["--verdict-b64", utf8Base64(JSON.stringify(visual))] });
         if (!g.error) break;
         if (attempt === INVALID_RECAPTURES) throw stop("harness-error", `The captures stay invalid. ${sentence(g.res.summary)}`);
         log("The captures show different states. Capturing again.");

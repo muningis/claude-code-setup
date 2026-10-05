@@ -785,3 +785,46 @@ t('prove copies the files that a proof changed to a backup before it restores th
   expect(existsSync(join(repo, 'stray.txt'))).toBe(false)
   expect(readFileSync(join(repo, 'src/greet.sh'), 'utf8')).toBe(before)
 })
+
+t('a waiver added after b0-prep reaches context.md at b1, b2-capture and b3-prep', () => {
+  const repo = makeRepo({
+    rows: [{ id: 'cp1', target: 'profile' }],
+    config: c => { c.visual = { mode: 'render', capture: 'printf x > {out}', viewports: [375], reference: { kind: 'none' } } },
+  })
+  expect(gate(repo, 'b0-prep').code).toBe(0)
+  const context = () => readFileSync(join(repo, `${EV}/context.md`), 'utf8')
+  expect(context()).not.toContain('waive(cp1)')
+  for (const [n, g] of ['b1', 'b2-capture', 'b3-prep'].entries()) {
+    const waiver = `waive(cp1): header ${n} — moved on purpose`
+    rs(repo, 'row', 'demo', 'cp1', '--note', waiver)
+    gate(repo, g)
+    expect(context()).toContain(`- cp1 · ${waiver}`)
+  }
+})
+
+t('b2 writes a missing visual file from --verdict-b64, and keeps an existing file', () => {
+  const repo = makeRepo({
+    rows: [{ id: 'cp1', target: 'profile' }],
+    config: c => { c.visual = { mode: 'render', capture: 'true', viewports: [375], reference: { kind: 'none' } } },
+  })
+  const b64 = (v: unknown) => Buffer.from(JSON.stringify(v), 'utf8').toString('base64')
+  put(repo, `${EV}/2-capture-r1.json`, JSON.stringify({ round: 1, images: [], identical: false, regressChanged: [] }))
+  const verdict = { verdict: 'FAIL', differences: [{ id: 'cp1-V1-1', kind: 'text', element: 'ünï — title' }] }
+  const r1 = gate(repo, 'b2', '--round', '1', '--verdict-b64', b64(verdict))
+  expect(r1.json).toMatchObject({ verdict: 'fail', blocking: ['cp1-V1-1'] })
+  expect(JSON.parse(readFileSync(join(repo, `${EV}/2-visual-r1.json`), 'utf8'))).toEqual(verdict)
+
+  // The file wins: the option is ignored.
+  put(repo, `${EV}/2-capture-r2.json`, JSON.stringify({ round: 2, images: [], identical: false, regressChanged: [] }))
+  put(repo, `${EV}/2-visual-r2.json`, JSON.stringify({ verdict: 'PASS', differences: [] }))
+  const r2 = gate(repo, 'b2', '--round', '2', '--verdict-b64', b64(verdict))
+  expect(r2.json).toMatchObject({ verdict: 'pass', blocking: [] })
+  expect(JSON.parse(readFileSync(join(repo, `${EV}/2-visual-r2.json`), 'utf8'))).toEqual({ verdict: 'PASS', differences: [] })
+
+  // A bad option is an error, not a file.
+  const bad = gate(repo, 'b2', '--round', '3', '--verdict-b64', b64([1]))
+  expect(bad.code).toBe(2)
+  expect(bad.json.summary).toContain('JSON object')
+  expect(gate(repo, 'b2', '--round', '4', '--verdict-b64', '!!').code).toBe(2)
+  expect(gate(repo, 'b2', '--round', '5').json.summary).toContain('missing 2-visual-r5.json')
+})
