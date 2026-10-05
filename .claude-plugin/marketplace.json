@@ -28,11 +28,6 @@
       "name": "ratchet",
       "source": "./plugins/ratchet",
       "description": "Plan-and-verify workflow: grill, PRD/spec/design log, roast, then small checkpoints that a deterministic engine pushes through red tests, behaviour, visual, two blind reviewers (findings block only with a proof or a rule ID) and your approval. Also fix, verify, handover/resume and why flows, STE-lite doc checks, and a nightly dream that reads all your sessions and proposes rules for you to approve."
-    },
-    {
-      "name": "den",
-      "source": "./plugins/den",
-      "description": "A Claude Code mod: pixel-art raccoons act out what Claude and its subagents are doing, in a docked pane — and go full frenzy during a ratchet run (crew stations, minion conveyor, sirens, YOUR TURN sign, gear clicks, confetti). /den demo shows it all."
     }
   ]
 }

@@ -44,8 +44,7 @@
     "swift-lsp@claude-plugins-official": false,
     "scruff@skillz": true,
     "kit@skillz": false,
-    "ratchet@skillz": true,
-    "den@skillz": true
+    "ratchet@skillz": true
   },
   "extraKnownMarketplaces": {
     "skillz": {

@@ -34,7 +34,7 @@ home/                  # source for ~/.claude — deliberately not named .claude
 .claude-plugin/        # this repo IS a plugin marketplace (name: skillz)
   marketplace.json     # manifest listing the plugins below
 plugins/               # vendored Claude Code plugins (skills)
-  ratchet/ den/ recap/ scruff/ kit/
+  ratchet/ recap/ scruff/ kit/
 mcp/                   # on-demand knowledge/docs MCP servers (Basic Memory, Context7)
   README.md            # rationale, per-server usage, portable config for other harnesses
 setup.md               # maintenance & cleanup runbook (every removal is gated by a question)
@@ -104,7 +104,6 @@ plugins under `plugins/`:
   and fixes start only when you type them. A nightly dream proposes learnings for you to
   approve. Ratchet replaced snare, sniff, rinse, baton and trail, and still reads their
   files (`.claude/rinse.json`, `.claude/sniff.json`, `.claude/handovers/`).
-- **den** — a mod (function hooks): pixel-art raccoons act out Claude and its subagents in a docked pane, and go full frenzy during ratchet runs (`/den demo`).
 - **recap** — cross-session standup of what you actually drove.
 - **scruff** — mentor mode: briefs you to build it yourself, then grills what you built (with proof).
 - **kit** — kit out a repo with code intelligence: detect its languages, install the language servers, and enable the LSP plugins in that repo's own `.claude/settings.json`.

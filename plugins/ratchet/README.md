@@ -94,8 +94,7 @@ from round 4.
 
 The lead stays thin. The workflow does gates B0 to B3, and the lead reads only short
 summaries. After each lock, the relay mod resets the context to a minimal baton. A status
-line shows `ratchet cp3 · B1 r2 · 4m`. den draws the workflow's agents from
-`.claude/ratchet/live.json`.
+line shows `ratchet cp3 · B1 r2 · 4m`, from `.claude/ratchet/live.json`.
 
 ## What lands in the repo
 

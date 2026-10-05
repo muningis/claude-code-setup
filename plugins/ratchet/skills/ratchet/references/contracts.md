@@ -143,7 +143,7 @@ So the engine adds `--detach`:
 
 **Plan rows and live roles.** A gate that passes `b0` sets the row to `red`. A gate that
 passes `b3` sets it to `green`. After each gate, `LIVE.roles` names the role or roles that
-work next, so den can draw them.
+work next.
 
 ### `b0-prep`: before the spec agent
 
@@ -343,7 +343,7 @@ Added fields: `id`, `result` (`reproduced`, `unproven` or `invalid`), `exit`, `m
 
 ## Live file
 
-`LIVE` shows what runs now. den and the status line read it. The guard trusts it only
+`LIVE` shows what runs now. The status line reads it. The guard trusts it only
 when `active` is true and `updated` is less than 6 hours old.
 
 - The file is `.claude/ratchet/live.json` in the repo root. The mods read it relative to

@@ -213,8 +213,8 @@ describe('the --relay flag', () => {
     await $.command.run({ command: 'ratchet', args: 'run slugify --auto' })
     await $.command.run({ command: 'ratchet', args: 'run --relay' })
     await $.command.run({ command: 'ratchet', args: 'status' })
-    await $.command.run({ command: 'den', args: 'demo' })
-    expect(seen.runs).toEqual(['ratchet run slugify --auto --relay', 'ratchet run --relay', 'ratchet status', 'den demo'])
+    await $.command.run({ command: 'recap', args: '2d' })
+    expect(seen.runs).toEqual(['ratchet run slugify --auto --relay', 'ratchet run --relay', 'ratchet status', 'recap 2d'])
   })
 
   test('is left off when the repo turns the relay off', async ($, on) => {
