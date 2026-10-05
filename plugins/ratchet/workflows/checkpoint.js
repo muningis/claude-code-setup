@@ -689,7 +689,8 @@ async function run(cfg) {
           throw stop("harness-error", `The ${role} reviewer returned nothing.`);
         lastReview[role] = r;
       });
-      const g = await gate("b3", r, P.b3, { extra: roles.includes("arch") ? [] : ["--skip-arch"] });
+      const copies = roles.flatMap((role, i) => [`--${role}-b64`, utf8Base64(JSON.stringify(outs[i]))]);
+      const g = await gate("b3", r, P.b3, { extra: [...roles.includes("arch") ? [] : ["--skip-arch"], ...copies] });
       openArch = archBlocking(g.res.blocking);
       if (g.pass)
         return;

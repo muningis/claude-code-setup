@@ -209,6 +209,38 @@ describe("checkpoint workflow", () => {
     expect(calls.find((c) => c.name === "gate b2-capture")!.prompt).not.toContain("--verdict-b64");
   });
 
+  test("the b3 gate carries each reviewer's verdict as --arch-b64 and --break-b64", async () => {
+    const arch = review("arch");
+    const brk = review("break");
+    const { calls } = await dryRun({
+      state: stateAt("B3"),
+      gates: {
+        "b3-prep": { patch: `${EV}/3-patch-r1.diff`, evidence: `${EV}/3-patch-r1.diff`, checkOutputs: [], structural: true },
+        b3: { summary: "no blocking findings", evidence: `${EV}/3-triage-r1.json` },
+      },
+      agents: { "ratchet:review-arch": arch, "ratchet:review-break": brk },
+    });
+    const b3 = calls.find((c) => c.name === "gate b3")!;
+    const dec = (flag: string) => JSON.parse(Buffer.from(b3.prompt.match(new RegExp(` ${flag} (\\S+)`))![1], "base64").toString("utf8"));
+    expect(dec("--arch-b64")).toEqual(arch);
+    expect(dec("--break-b64")).toEqual(brk);
+    expect(calls.find((c) => c.name === "gate b3-prep")!.prompt).not.toContain("-b64");
+  });
+
+  test("a skipped arch reviewer leaves --arch-b64 out of the b3 gate", async () => {
+    const { calls } = await dryRun({
+      state: stateAt("B3", { rounds: { b0: 1, b1: 1, b2: 0, b3: 1 } }),
+      gates: {
+        "b3-prep": { patch: `${EV}/3-patch-r2.diff`, evidence: `${EV}/3-patch-r2.diff`, checkOutputs: [], structural: false, delta: `${EV}/3-delta-r2.diff` },
+        b3: { summary: "no blocking findings", evidence: `${EV}/3-triage-r2.json` },
+      },
+      agents: { "ratchet:review-arch": review("arch"), "ratchet:review-break": review("break") },
+    });
+    const b3 = calls.find((c) => c.name === "gate b3")!;
+    expect(b3.prompt).toContain("--break-b64");
+    expect(b3.prompt).not.toContain("--arch-b64");
+  });
+
   test("SPEC_CONFLICT asks for a decision before any gate runs", async () => {
     const { result, calls } = await dryRun({
       state: stateAt("B1"),

@@ -1,6 +1,9 @@
 """Gates b3-prep and b3: prepare the review, then triage what the reviewers found."""
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import os
 import re
 
@@ -78,8 +81,24 @@ def review_path(ctx, role, rnd):
     return None
 
 
+def write_missing_review(ctx, role, rnd):
+    """A reviewer sometimes returns its verdict without writing the file; the engine hands the copy over here."""
+    b64 = (ctx.review_b64 or {}).get(role)
+    if not b64 or review_path(ctx, role, rnd):
+        return
+    try:
+        text = base64.b64decode(b64, validate=True).decode("utf-8")
+        data = json.loads(text)
+    except (binascii.Error, ValueError) as e:
+        raise RsError("--%s-b64 is not base64 of JSON: %s" % (role, e))
+    if not isinstance(data, dict):
+        raise RsError("--%s-b64 must hold a JSON object" % role)
+    common.write_text(ctx.evp("3-%s-r%d.json" % (role, rnd)), text)
+
+
 def load_review(ctx, role, rnd):
     """(data, findings) of one reviewer file, or None when there is no file."""
+    write_missing_review(ctx, role, rnd)
     p = review_path(ctx, role, rnd)
     if p is None:
         return None

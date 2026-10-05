@@ -828,3 +828,37 @@ t('b2 writes a missing visual file from --verdict-b64, and keeps an existing fil
   expect(gate(repo, 'b2', '--round', '4', '--verdict-b64', '!!').code).toBe(2)
   expect(gate(repo, 'b2', '--round', '5').json.summary).toContain('missing 2-visual-r5.json')
 })
+
+t('b3 writes a missing reviewer file from --arch-b64 and --break-b64, and keeps an existing file', () => {
+  const repo = makeRepo()
+  const b64 = (v: unknown) => Buffer.from(JSON.stringify(v), 'utf8').toString('base64')
+  const arch = { role: 'arch', round: 1, verdict: 'CHANGES', findings: [{ id: 'cp1-A1-1', severity: 'high', file: 'src/greet.sh', issue: 'ünï — restates', rule: 'ARCH-COMMENTS' }] }
+  const brk = { role: 'break', round: 1, verdict: 'APPROVE', findings: [] }
+  const r1 = gate(repo, 'b3', '--arch-b64', b64(arch), '--break-b64', b64(brk))
+  expect(r1.json).toMatchObject({ verdict: 'fail', blocking: ['cp1-A1-1'] })
+  expect(JSON.parse(readFileSync(join(repo, `${EV}/3-arch-r1.json`), 'utf8'))).toEqual(arch)
+  expect(JSON.parse(readFileSync(join(repo, `${EV}/3-break-r1.json`), 'utf8'))).toEqual(brk)
+
+  // The file wins: the option is ignored.
+  const repo2 = makeRepo()
+  put(repo2, `${EV}/3-arch-r1.json`, JSON.stringify({ role: 'arch', round: 1, verdict: 'APPROVE', findings: [] }))
+  put(repo2, `${EV}/3-break-r1.json`, JSON.stringify({ role: 'break', round: 1, verdict: 'APPROVE', findings: [] }))
+  const r2 = gate(repo2, 'b3', '--arch-b64', b64(arch))
+  expect(r2.json).toMatchObject({ verdict: 'pass', blocking: [] })
+  expect(JSON.parse(readFileSync(join(repo2, `${EV}/3-arch-r1.json`), 'utf8')).findings).toEqual([])
+})
+
+t('b3 rejects a bad --arch-b64 and keeps the missing-file error without a copy', () => {
+  const repo = makeRepo()
+  const b64 = (v: unknown) => Buffer.from(JSON.stringify(v), 'utf8').toString('base64')
+  review(repo, 'break', 1, [])
+  const bad = gate(repo, 'b3', '--arch-b64', b64([1]))
+  expect(bad.code).toBe(2)
+  expect(bad.json.summary).toContain('JSON object')
+  expect(existsSync(join(repo, `${EV}/3-arch-r1.json`))).toBe(false)
+  expect(gate(repo, 'b3', '--arch-b64', '!!').code).toBe(2)
+  expect(gate(repo, 'b3').json.summary).toContain('missing 3-arch-r1.json')
+  const repo2 = makeRepo()
+  review(repo2, 'arch', 1, [])
+  expect(gate(repo2, 'b3').json.summary).toContain('missing 3-break-r1.json')
+})

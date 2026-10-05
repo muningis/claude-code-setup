@@ -1,4 +1,4 @@
-"""gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--detach] [--verdict-b64 <b64>]: run one gate; update STATE, LIVE and METRICS."""
+"""gate <gate> <slug> <cp> --nonce <n> [--round <r>] [--detach] [--verdict-b64 <b64>] [--arch-b64 <b64>] [--break-b64 <b64>]: run one gate; update STATE, LIVE and METRICS."""
 from __future__ import annotations
 
 import os
@@ -109,7 +109,7 @@ def start_job(root, slug, cp, gate, rnd, nonce, argv):
 def main(argv):
     started = time.time()
     try:
-        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--round", "--verdict-b64"),
+        pos, opts = common.parse_args(argv, value_flags=("--nonce", "--round", "--verdict-b64", "--arch-b64", "--break-b64"),
                                       bool_flags=("--skip-arch", "--detach"))
     except RsError as e:
         return common.emit("gate", "error", str(e), harness_error=str(e))
@@ -140,6 +140,7 @@ def main(argv):
         ctx = Ctx(root, cfg, slug, plan, row, state, rnd, nonce, gate)
         ctx.skip_arch = bool(opts.get("--skip-arch"))
         ctx.verdict_b64 = opts.get("--verdict-b64")
+        ctx.review_b64 = {"arch": opts.get("--arch-b64"), "break": opts.get("--break-b64")}
         common.live_update(root, slug=slug, cp=row["id"], gate=LIVE_GATE[gate], round=rnd)
         try:
             if gate in REFRESH_CONTEXT and os.path.isfile(ctx.evp("context.md")):

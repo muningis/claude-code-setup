@@ -284,8 +284,11 @@ three facts are true:
 
 The gate reads `EV/3-arch-r<r>.json` and `EV/3-break-r<r>.json`, in the verdict schema
 below. A missing file for a reviewer that ran is an `error`. When the engine skipped the
-architecture reviewer, it passes `--skip-arch`. The gate writes the full triage to
-`EV/3-triage-r<r>.json`.
+architecture reviewer, it passes `--skip-arch`. If a file is missing, `--arch-b64 <base64
+of the verdict JSON>` or `--break-b64 <...>` supplies it: the gate validates the copy as a
+JSON object and writes the file. An existing file wins, and a missing file with no copy is
+still an `error`. The engine passes the returned object of each reviewer that ran, and no
+copy for a skipped one. The gate writes the full triage to `EV/3-triage-r<r>.json`.
 
 - A break finding blocks only when its `proof` reproduces (see `RS prove`).
 - An architecture finding blocks only when its `rule` names a rule ID that exists in

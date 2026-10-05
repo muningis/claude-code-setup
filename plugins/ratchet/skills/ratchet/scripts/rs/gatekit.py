@@ -27,6 +27,7 @@ class Ctx(object):
         self._base = None
         self._changed = None
         self.skip_arch = False
+        self.review_b64 = {}  # b3 only: each reviewer's verdict, for when it wrote no file
         self.verdict_b64 = None  # b2 only: the visual agent's verdict, for when it wrote no file
 
     def evp(self, name):
