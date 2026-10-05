@@ -28,6 +28,8 @@ MAX_PATHS = 8
 DUP = 0.6
 CONTAINED = 0.8
 NO_TARGET = ("", "NULL", "NONE", "-", "N/A")
+# A candidate that only the item cap cut waits in carried.json for this many later dreams.
+MAX_CARRY = 3
 HUMAN = re.compile(r"^(?:4-human[^/]*\.md|decisions\.md)$")
 TURN_ID = re.compile(r"^[0-9a-f]{8}#\d+$", re.I)
 # Negations stay in: "never X" and "X" are not the same rule.
@@ -562,6 +564,64 @@ def pick(survivors, max_items):
     return ranked[:max_items], out
 
 
+# ---------------------------------------------------------------- carried candidates
+
+def snapshot(c, bid):
+    """A candidate that the cap cut, as carried.json keeps it. Its cites were checked against the
+    harvest of the dream that cut it, so it keeps its counts and its short refs, not the cites."""
+    carried = c.get("carried")
+    return {"op": c["op"], "kind": c["kind"], "ids": c["ids"], "rule": c["rule"], "why": c["why"],
+            "project": c["project"], "repo": c["repo"], "paths": c["paths"], "scope": c["scope"],
+            "check": c["check"], "apply": c["apply"], "keys": c["keys"], "counter": c["counter"],
+            "evidence": [x["short"] for x in c["evidence"]], "recurrence": c["recurrence"],
+            "strong": c["strong"], "reason": c.get("base_reason") or c["reason"],
+            "from": carried["from"] if carried else bid, "age": carried["age"] + 1 if carried else 0}
+
+
+def carried_candidate(snap, ctx, n):
+    """(candidate, None) or (None, (label, reason)) for one item of carried.json. Its target is
+    checked again, because rules, entries and folders can change between two dreams."""
+    if not isinstance(snap, dict):
+        return None, ("invalid", "a carried item is not an object")
+    age = snap.get("age")
+    age = age if isinstance(age, int) and not isinstance(age, bool) else MAX_CARRY
+    if age >= MAX_CARRY:
+        return None, ("expire", "carried for %d dreams" % age)
+    kind, op = snap.get("kind"), snap.get("op")
+    if kind not in KINDS or op not in OPS or not dream_io.BUNDLE_RE.match(str(snap.get("from") or "")):
+        return None, ("invalid", "a carried item has no valid kind, op or origin")
+    ids = [str(x) for x in snap.get("ids") or []]
+    if kind == "global":
+        gone = [t for t in ids if t not in ctx.rules]
+        if gone:
+            return None, ("invalid", "rule %s is no longer active" % gone[0])
+    elif kind == "project":
+        project = str(snap.get("project") or "")
+        if not project or "/" in project or project in (".", "..") \
+                or not os.path.isdir(os.path.join(dream_io.projects_dir(), project)):
+            return None, ("invalid", "no project folder %r" % project)
+    else:
+        repo = str(snap.get("repo") or "")
+        if not os.path.isabs(repo) or not os.path.isdir(os.path.join(repo, ".claude", "ratchet")):
+            return None, ("invalid", "%r is not a repo with ratchet state" % repo)
+        gone = [t for t in ids if t not in ctx.learnings(repo)[1]]
+        if gone:
+            return None, ("invalid", "entry %s is no longer active" % gone[0])
+    text = lambda key: one_line(snap.get(key))
+    base = text("reason") or "cited"
+    c = {"op": op, "kind": kind, "ids": ids, "rule": text("rule"), "why": text("why"),
+         "project": snap.get("project"), "repo": snap.get("repo"), "paths": snap.get("paths"),
+         "scope": snap.get("scope"), "check": text("check"), "apply": text("apply"),
+         "keys": [str(k) for k in snap.get("keys") or []], "counter": list(snap.get("counter") or []),
+         "evidence": [{"short": str(s)} for s in snap.get("evidence") or []],
+         "recurrence": snap.get("recurrence") if isinstance(snap.get("recurrence"), int) else 0,
+         "strong": bool(snap.get("strong")), "ok": True, "why_not": "", "missing": [],
+         # A carried item wins a tie with a new one: it has waited a dream already.
+         "idx": n - 10000, "base_reason": base, "reason": "carried from %s, %s" % (snap["from"], base),
+         "carried": {"from": snap["from"], "age": age}}
+    return c, None
+
+
 # ---------------------------------------------------------------- the proposal
 
 def entry_of(c):
@@ -605,6 +665,8 @@ def make_items(kept, ctx):
             "check": c["check"] or None, "apply": c["apply"] or None,
             "evidence": [x["short"] for x in c["evidence"]], "counter": c["counter"],
             "recurrence": c["recurrence"], "strong": c["strong"], "reason": c["reason"]})
+        if c.get("carried"):
+            items[-1]["carried"] = c["carried"]
     return items
 
 
@@ -702,17 +764,40 @@ def main(argv):
                 drop(bad[0], str(shown.get("op", "?")), shown.get("rule", ""), bad[1])
             else:
                 survivors.append(c)
+
+        # The items that a cap cut in an earlier dream compete again, after a fresh check of their target.
+        held = common.read_json(dream_io.carried_path(), default=None)
+        held = held.get("items") if isinstance(held, dict) and isinstance(held.get("items"), list) else []
+        for n, snap in enumerate(held):
+            c, bad = carried_candidate(snap, ctx, n)
+            if c is not None:
+                bad = screen(c, ctx)
+            if bad:
+                shown = c if c is not None else snap if isinstance(snap, dict) else {}
+                label = "expire" if bad[0] == "expire" else "drop carried %s" % bad[0]
+                log.append("%s %s %s: %s - %s" % (label, shown.get("op", "?"), shown.get("kind", "?"), bad[1],
+                                                   one_line(shown.get("rule", ""))[:80]))
+            else:
+                survivors.append(c)
+
+        carry = []
+
+        def cut_out(cut):
+            # Only the caps carry: a weak, duplicate or conflicting candidate is not owed a second look.
+            for cat, c, why in cut:
+                drop(cat, c["op"], c["rule"], why)
+                if cat == "cap":
+                    carry.append(snapshot(c, bid))
+                    log.append("carry %s %s: %s - %s" % (c["op"], c["kind"], why, one_line(c["rule"])[:80]))
+
         active = len(ctx.rules)
         survivors, cut = over_cap(survivors, active, cfg["globalCap"])
-        for cat, c, why in cut:
-            drop(cat, c["op"], c["rule"], why)
+        cut_out(cut)
         kept, cut = pick(survivors, cfg["maxItems"])
-        for cat, c, why in cut:
-            drop(cat, c["op"], c["rule"], why)
+        cut_out(cut)
         # A RETIRE that pick cut may have made room for an ADD that stayed. Check the cap once more.
         kept, cut = over_cap(kept, active, cfg["globalCap"])
-        for cat, c, why in cut:
-            drop(cat, c["op"], c["rule"], why)
+        cut_out(cut)
 
         items = make_items(kept, ctx)
         keep_lines = ["keep %s %s %s: %s - %s" % (it["id"], it["op"], it["target"], it["reason"], it["rule"][:80])
@@ -721,7 +806,9 @@ def main(argv):
         generated = harvest.get("generatedEpoch")
         if not isinstance(generated, (int, float)) or isinstance(generated, bool):
             generated = now
-        summary = "kept %d of %d candidates" % (len(items), len(cands))
+        summary = "kept %d of %d candidates" % (len(items), len(cands) + len(held))
+        if held:
+            summary += " (%d carried from earlier dreams)" % len(held)
         cut_text = ", ".join("%d %s" % (v, k) for k, v in dropped.items() if v)
         if cut_text:
             summary += "; dropped %s" % cut_text
@@ -737,10 +824,12 @@ def main(argv):
                               {"bundle": bid, "reviewed": dream_io.iso_of(now), "accepted": [], "rejected": [],
                                "note": "no items to review"})
         # The window moves only here, after the proposal exists. A failed night is read again the next night.
+        # carried.json is written in the same step: what this dream proposed or dropped leaves it.
+        common.write_json(dream_io.carried_path(), {"version": 1, "items": carry})
         dream_io.write_last(bid, float(generated), len(items))
         dream_io.refresh_pending()
         return common.emit("dream curate", "pass", summary, evidence=report, nonce=nonce, root=home,
-                           extra={"bundle": bid, "items": len(items), "candidates": len(cands),
+                           extra={"bundle": bid, "items": len(items), "candidates": len(cands), "carried": len(carry),
                                   "dropped": dict((k, v) for k, v in dropped.items() if v),
                                   "proposal": common.rel(home, os.path.join(bdir, "proposal.json"))})
 

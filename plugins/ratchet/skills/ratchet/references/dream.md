@@ -44,6 +44,9 @@ Each dream command works in any folder, also outside a git repo.
    counts the recurrence itself, and ignores a count that the model gives. It removes
    duplicates and rejected items, and keeps `maxItems` items or fewer. It writes
    `proposal.json` and `proposal.md`, and only then moves the window.
+4. A candidate that only a cap cut waits in `dreams/carried.json`. The next dream checks
+   its target again and weighs it with the new candidates. It wins a tie. Apply checks it
+   against the harvest of the dream that cut it. After 3 dreams, it expires.
 
 ## Targets
 

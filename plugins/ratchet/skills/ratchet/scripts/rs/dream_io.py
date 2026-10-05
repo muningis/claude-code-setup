@@ -80,6 +80,11 @@ def rejected_path():
     return os.path.join(dreams_dir(), "rejected.jsonl")
 
 
+def carried_path():
+    """The candidates that only the item cap cut. The next curate weighs them again."""
+    return os.path.join(dreams_dir(), "carried.json")
+
+
 def utc_date():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
 

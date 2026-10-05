@@ -629,6 +629,51 @@ t('curate caps the global rules: an ADD needs room, and a RETIRE makes room', ()
   expect(json(home, c2.json.proposal).items.map((i: any) => [i.op, i.entry, i.newId])).toEqual([['ADD', null, 'G-003'], ['RETIRE', 'G-001', null]])
 })
 
+t('a candidate that the item cap cut is carried to the next dream, applies against its own harvest, and expires after 3 dreams', () => {
+  const { home, work } = makeHome()
+  session(home, '-tmp-demo', AAA, 'human.jsonl')
+  put(home, `${R}/dream.json`, JSON.stringify({ maxItems: 1 }))
+  const global = { op: 'ADD', target: 'global', rule: 'Run the formatter before every commit.', why: 'The human said so.', evidence: ['aaaaaaaa#2'] }
+  const project = { op: 'ADD', target: 'project', project: '-tmp-demo', rule: 'Stop and ask before you delete a build folder.',
+    why: 'The human stopped a delete.', evidence: ['aaaaaaaa#11'] }
+
+  // Dream 1: the cap keeps one item. The other one waits for the next dream.
+  const h1 = dream(work, 'harvest', '--since', '2026-09-30')
+  put(home, `${R}/dreams/${h1.json.bundle}/candidates.json`, JSON.stringify({ candidates: [global, project] }))
+  const c1 = dream(work, 'curate', h1.json.bundle)
+  expect(c1.json).toMatchObject({ items: 1, carried: 1, dropped: { cap: 1 } })
+  const carried = json(home, `${R}/dreams/carried.json`)
+  expect(carried.items.map((i: any) => [i.kind, i.rule.slice(0, 12), i.from, i.age])).toEqual([['project', 'Stop and ask', h1.json.bundle, 0]])
+  expect(read(home, c1.json.evidence)).toContain('carry ADD project: over the limit of 1 items - Stop and ask')
+  expect(dream(work, 'apply', h1.json.bundle, '--reject', 'P1', '--reason', 'not now').code).toBe(0)
+
+  // Dream 2 sees only another project, and nothing new is proposed. The carried item comes back, and
+  // apply checks its project against the harvest of dream 1, which listed it.
+  writeSession(home, '-tmp-other', EEE, [
+    humanRec(EEE, '2026-10-03T09:00:00.000Z', '/tmp/other', 'Always run the linter first.'),
+    asstRec(EEE, '2026-10-03T09:01:00.000Z', '/tmp/other'),
+  ])
+  const h2 = dream(work, 'harvest', '--since', '2026-10-03')
+  expect(Object.keys(json(home, `${R}/dreams/${h2.json.bundle}/harvest.json`).projects)).toEqual(['-tmp-other'])
+  put(home, `${R}/dreams/${h2.json.bundle}/candidates.json`, JSON.stringify({ candidates: [] }))
+  const c2 = dream(work, 'curate', h2.json.bundle)
+  expect(c2.json).toMatchObject({ items: 1, carried: 0 })
+  const back = json(home, c2.json.proposal).items[0]
+  expect(back).toMatchObject({ target: 'project', project: '-tmp-demo', carried: { from: h1.json.bundle }, evidence: ['aaaaaaaa#11'] })
+  expect(read(home, `${R}/dreams/${h2.json.bundle}/proposal.md`)).toContain(`Evidence: carried from ${h1.json.bundle}, 1 turn`)
+  expect(json(home, `${R}/dreams/carried.json`).items).toEqual([])
+  expect(dream(work, 'apply', h2.json.bundle, '--accept', 'P1').code).toBe(0)
+  expect(has(home, `${PROJECTS}/-tmp-demo/memory/stop-and-ask-before-you-delete.md`)).toBe(true)
+
+  // A carried item that waited 3 dreams expires.
+  put(home, `${R}/dreams/carried.json`, JSON.stringify({ version: 1, items: [{ ...carried.items[0], rule: 'Keep the cache warm before a test run.', age: 3 }] }))
+  const h3 = dream(work, 'harvest', '--since', '2026-10-03', '--all')
+  put(home, `${R}/dreams/${h3.json.bundle}/candidates.json`, JSON.stringify({ candidates: [] }))
+  const c3 = dream(work, 'curate', h3.json.bundle)
+  expect(c3.json).toMatchObject({ items: 0, carried: 0 })
+  expect(read(home, c3.json.evidence)).toContain('expire ADD project: carried for 3 dreams - Keep the cache warm')
+})
+
 // ---------------------------------------------------------------- apply
 
 t('apply writes a global rule file with paths and a project memory file with its index line, and records a rejection', () => {

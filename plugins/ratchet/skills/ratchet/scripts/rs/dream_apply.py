@@ -173,12 +173,26 @@ class Plan(object):
         self.bid = bid
         self.today = dream_io.utc_date()
         self.known = known
+        self._origin = {}
         self.learn = {}
         self.files = {}
         self.index = {}
         self.moves = []
         self.gids = []
         self.skipped = []
+
+    def known_for(self, item):
+        """The projects and repos that an item may name. A carried item was checked against the
+        harvest of the dream that cut it, so that harvest decides, not the one of this dream."""
+        origin = (item.get("carried") or {}).get("from") if isinstance(item.get("carried"), dict) else None
+        if not origin:
+            return self.known
+        bid = dream_io.check_bundle(str(origin))
+        if bid not in self._origin:
+            h = common.read_json(os.path.join(dream_io.bundle_dir(bid), "harvest.json"), default=None)
+            self._origin[bid] = ({"projects": set(h.get("projects") or {}), "repos": set(h.get("ratchet") or {})}
+                                 if isinstance(h, dict) else None)
+        return self._origin[bid]
 
     def learnings_text(self, repo):
         if repo not in self.learn:
@@ -257,7 +271,8 @@ def plan_project(plan, item):
         raise RsError("%s: a project memory supports ADD only" % iid)
     if not project or project in (".", "..") or "/" in project or "\\" in project:
         raise RsError("%s: bad project folder %r" % (iid, project))
-    if plan.known is not None and project not in plan.known["projects"]:
+    known = plan.known_for(item)
+    if known is not None and project not in known["projects"]:
         raise RsError("%s: project %r has no human turn in this harvest" % (iid, project))
     if not os.path.isdir(os.path.join(dream_io.projects_dir(), project)):
         raise RsError("%s: no project folder %r" % (iid, project))
@@ -287,7 +302,8 @@ def plan_ratchet(plan, item):
     repo = str(item.get("repo") or "")
     if not os.path.isabs(repo) or not os.path.isdir(os.path.join(repo, ".claude", "ratchet")):
         raise RsError("%s: %r is not a repo with ratchet state" % (iid, repo))
-    if plan.known is not None and repo not in plan.known["repos"]:
+    known = plan.known_for(item)
+    if known is not None and repo not in known["repos"]:
         raise RsError("%s: repo %s has no ratchet evidence in this harvest" % (iid, repo))
     text, eid = apply_learnings(plan.learnings_text(repo), item, plan.bid)
     plan.learn[repo][1] = text
